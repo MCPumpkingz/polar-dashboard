@@ -2,3 +2,5 @@ streamlit
 pymongo
 pandas
 streamlit-autorefresh
+pytz
+streamlit-autorefresh
