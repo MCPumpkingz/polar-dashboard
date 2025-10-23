@@ -16,7 +16,7 @@ except ModuleNotFoundError:
     import plotly.graph_objects as go
 
 # === Seitenkonfiguration ===
-st.set_page_config(page_title="Polar SAMAY H10 Live Dashboard", layout="wide")
+st.set_page_config(page_title="Biofeedback System - Polar H10 Live Dashboard", layout="wide")
 
 # === Globales Styling (Helvetica, Clean, Weiß) ===
 st.markdown("""
