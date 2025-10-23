@@ -196,7 +196,7 @@ else:
     st.subheader(f"💓 HRV Parameter (RMSSD & SDNN) – letzte {window_minutes} Minuten")
     st.line_chart(df[["hrv_rmssd", "hrv_sdnn"]])
 
-    # === 🧭 Farbige State Timeline (Plotly) ===
+    # === 🧭 Farbige State Timeline (Plotly, Titel außerhalb) ===
     if not df.empty and "hrv_rmssd" in df.columns:
         def get_state_value(rmssd, baseline):
             if not baseline or rmssd is None:
@@ -214,11 +214,14 @@ else:
         df["state_value"] = df["hrv_rmssd"].apply(lambda x: get_state_value(x, baseline_rmssd))
 
         colors = {
-            1: "#2ecc71",
-            2: "#f1c40f",
-            3: "#f39c12",
-            4: "#e74c3c"
+            1: "#2ecc71",  # Flow
+            2: "#f1c40f",  # Balanced
+            3: "#f39c12",  # Mild Stress
+            4: "#e74c3c"   # High Stress
         }
+
+        # 👉 Titel außerhalb der Grafik anzeigen
+        st.subheader(f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten")
 
         fig = go.Figure()
 
@@ -237,7 +240,6 @@ else:
                 ))
 
         fig.update_layout(
-            title=f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten",
             yaxis=dict(
                 tickvals=[1, 2, 3, 4],
                 ticktext=["Flow", "Balanced", "Mild Stress", "High Stress"],
@@ -248,7 +250,7 @@ else:
             showlegend=True,
             template="plotly_white",
             height=400,
-            margin=dict(l=40, r=40, t=50, b=40)
+            margin=dict(l=40, r=40, t=10, b=40)
         )
 
         st.plotly_chart(fig, use_container_width=True)
