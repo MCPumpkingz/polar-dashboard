@@ -5,7 +5,8 @@ import os
 from datetime import datetime, timedelta
 import pytz
 from streamlit_autorefresh import st_autorefresh
-import plotly.graph_objects as go  # für farbige Timeline
+import sys
+import subprocess
 
 # Sicherstellen, dass Plotly installiert ist
 try:
@@ -213,10 +214,10 @@ else:
         df["state_value"] = df["hrv_rmssd"].apply(lambda x: get_state_value(x, baseline_rmssd))
 
         colors = {
-            1: "#2ecc71",  # Flow
-            2: "#f1c40f",  # Balanced
-            3: "#f39c12",  # Mild Stress
-            4: "#e74c3c"   # High Stress
+            1: "#2ecc71",
+            2: "#f1c40f",
+            3: "#f39c12",
+            4: "#e74c3c"
         }
 
         fig = go.Figure()
