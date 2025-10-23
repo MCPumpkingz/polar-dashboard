@@ -4,6 +4,13 @@ from pymongo import MongoClient
 import datetime
 import os
 
+from streamlit_autorefresh import st_autorefresh  # automatisches Reload-Feature
+
+st.set_page_config(page_title="Polar H10 Live Dashboard", layout="wide")
+
+# 🔁 Dashboard aktualisiert sich jede Sekunde
+st_autorefresh(interval=1000, key="datarefresh")
+
 st.title("📊 Polar H10 Live Dashboard")
 
 # 🔗 MongoDB Verbindung
