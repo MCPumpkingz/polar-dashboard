@@ -13,7 +13,7 @@ st.set_page_config(page_title="Polar H10 Live Dashboard", layout="wide")
 st_autorefresh(interval=1000, key="datarefresh")
 
 # === Titel ===
-st.title("📊 Polar H10 Live Dashboard")
+st.title("📊 Polar SAMAY H10 Live Dashboard")
 
 # 🕒 Aktuelle Zeit (CET)
 tz = pytz.timezone("Europe/Zurich")
@@ -74,6 +74,55 @@ else:
         st.metric(label="❤️ Durchschnittliche Herzfrequenz (60s)", value=f"{avg_hr:.1f} bpm")
     if avg_rmssd:
         st.metric(label="💓 Durchschnittlicher RMSSD (60s)", value=f"{avg_rmssd:.4f}")
+
+    # === 🧠 SAMAY_Style Neurophysiologischer Zustand ===
+    st.markdown("### 🧠 Neurophysiologischer Zustand")
+
+    if avg_rmssd is not None and avg_hr is not None and not df.empty:
+        if avg_rmssd < 20 or avg_hr > 85:
+            state = "🔴 High Stress"
+            description = (
+                "Dein Nervensystem ist stark sympathisch aktiviert – der Körper befindet sich im **'Fight-or-Flight'-Modus**. "
+                "Empfohlen: 6 Atemzüge pro Minute oder 4-7-8-Atmung zur Aktivierung des Vagusnervs."
+            )
+            color = "#e74c3c"
+
+        elif avg_rmssd < 40 or avg_hr > 75:
+            state = "🟠 Mild Stress"
+            description = (
+                "Leichte sympathische Aktivierung. Du bist wach, fokussiert, aber nicht überlastet. "
+                "Empfohlen: **langes Ausatmen** (z. B. 4 Sekunden ein, 8 Sekunden aus)."
+            )
+            color = "#f39c12"
+
+        elif avg_rmssd < 60:
+            state = "🟡 Balanced"
+            description = (
+                "Dein autonomes Nervensystem ist in **Balance**. "
+                "Gute Regulation zwischen Aktivierung und Erholung. "
+                "Empfohlen: **Box-Breathing (4-4-4-4)** zur Stabilisierung."
+            )
+            color = "#f1c40f"
+
+        else:
+            state = "🟢 Recovery / Flow"
+            description = (
+                "Hohe parasympathische Aktivität – dein Körper befindet sich im **Regenerationsmodus**. "
+                "Optimale Bedingungen für Lernen, Erholung und Flow-Zustände."
+            )
+            color = "#2ecc71"
+
+        st.markdown(
+            f"""
+            <div style='background-color:{color}; padding:20px; border-radius:12px;'>
+              <h3 style='color:white; text-align:center;'>{state}</h3>
+              <p style='color:white; font-size:16px; text-align:center;'>{description}</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        st.info("Warte auf ausreichende HRV-Daten zur neurophysiologischen Analyse …")
 
     # === Diagramme ===
     st.subheader(f"❤️ Herzfrequenz (HR) – letzte {window_minutes} Minuten")
