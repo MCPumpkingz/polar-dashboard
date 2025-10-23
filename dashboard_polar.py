@@ -152,23 +152,51 @@ else:
                 1
             )
 
-        # --- Layout: Ampel | Beschreibung | Empfehlung ---
+                # --- Layout: Ampel | Beschreibung | Empfehlung ---
         col1, col2, col3 = st.columns([1, 2, 2])
 
+        # === Spalte 1: Ampel ===
         with col1:
             st.markdown("<h4 style='text-align:center;'>🧭 Status</h4>", unsafe_allow_html=True)
-            lamp_html = "<div style='display:flex; flex-direction:column; align-items:center; justify-content:center;'>"
+
             colors = ["#2ecc71", "#f1c40f", "#f39c12", "#e74c3c"]
+            lamp_html = """
+            <div style='display:flex; flex-direction:column; align-items:center; justify-content:center; margin-top:10px;'>
+            """
             for i, c in enumerate(colors, start=1):
                 active = (i == level)
                 lamp_html += f"""
-                    <div style='width:38px; height:38px; border-radius:50%;
-                                background-color:{c if active else "#e0e0e0"};
-                                margin:6px; box-shadow:{'0 0 10px ' + c if active else 'none'};
-                                opacity:{'1' if active else '0.3'};'></div>
+                    <div style='width:42px; height:42px; border-radius:50%;
+                                background-color:{c if active else "#e6e6e6"};
+                                margin:8px 0;
+                                box-shadow:{'0 0 14px ' + c if active else 'inset 0 0 4px #ccc'};
+                                transition:all 0.3s ease;
+                                opacity:{'1' if active else '0.4'};'></div>
                 """
             lamp_html += "</div>"
             st.markdown(lamp_html, unsafe_allow_html=True)
+
+        # === Spalte 2: Zustand ===
+        with col2:
+            st.markdown(f"""
+                <div style='text-align:center;'>
+                    <h3 style='color:{color}; margin-bottom:4px;'>{state}</h3>
+                    <p style='font-size:16px; color:#333; line-height:1.5; margin:0 auto; max-width:90%;'>
+                        {description}
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        # === Spalte 3: Empfehlung ===
+        with col3:
+            st.markdown(f"""
+                <div style='text-align:center;'>
+                    <h4 style='margin-bottom:4px;'>💡 Empfehlung</h4>
+                    <p style='font-size:15px; color:#444; line-height:1.5; margin:0 auto; max-width:90%;'>
+                        {recommendation}
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
 
         with col2:
             st.markdown(f"<h3 style='color:{color}; text-align:center; margin-bottom:0;'>{state}</h3>", unsafe_allow_html=True)
