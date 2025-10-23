@@ -12,7 +12,7 @@ client = MongoClient(MONGO_URI)
 db = client["nightscout-db"]
 collection = db["polar_data"]
 
-# 📥 Daten abrufen (neueste zuerst, max. 200 Einträge)
+# 📥 Daten abrufen
 data = list(collection.find().sort("timestamp", -1).limit(200))
 
 if not data:
@@ -20,10 +20,16 @@ if not data:
 else:
     df = pd.DataFrame(data)
 
-    # 🕒 Zeitstempel korrekt umwandeln (ISO8601 tolerant + CET)
+    # 🕒 Zeitstempel konvertieren, tolerant gegenüber UTC oder naive Zeitstempel
     df["timestamp"] = pd.to_datetime(df["timestamp"], format="ISO8601", errors="coerce")
     df = df.dropna(subset=["timestamp"])
-    df["timestamp"] = df["timestamp"].dt.tz_localize("UTC").dt.tz_convert("Europe/Zurich")
+
+    # Wenn keine Zeitzone vorhanden → UTC annehmen
+    if df["timestamp"].dt.tz is None:
+        df["timestamp"] = df["timestamp"].dt.tz_localize("UTC")
+
+    # Alles nach CET/Zürich umwandeln
+    df["timestamp"] = df["timestamp"].dt.tz_convert("Europe/Zurich")
 
     # 📊 Visualisierung
     st.subheader("❤️ Herzfrequenz (HR)")
