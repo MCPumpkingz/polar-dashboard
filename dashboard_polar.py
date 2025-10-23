@@ -56,7 +56,7 @@ st.markdown("""
 st_autorefresh(interval=1000, key="datarefresh")
 
 # === Titel ===
-st.title("📊 Polar SAMAY H10 Live Dashboard")
+st.title("📊 Biofeedback System - Polar H10 Live Dashboard")
 
 # === Aktuelle Zeit (CET) ===
 tz = pytz.timezone("Europe/Zurich")
