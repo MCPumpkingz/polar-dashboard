@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timedelta
 import pytz
 from streamlit_autorefresh import st_autorefresh
+import plotly.graph_objects as go  # für farbige Timeline
 
 # === Seitenkonfiguration ===
 st.set_page_config(page_title="Polar SAMAY H10 Live Dashboard", layout="wide")
@@ -187,7 +188,7 @@ else:
     st.subheader(f"💓 HRV Parameter (RMSSD & SDNN) – letzte {window_minutes} Minuten")
     st.line_chart(df[["hrv_rmssd", "hrv_sdnn"]])
 
-    # === 🧭 State Timeline ===
+    # === 🧭 Farbige State Timeline (Plotly) ===
     if not df.empty and "hrv_rmssd" in df.columns:
         def get_state_value(rmssd, baseline):
             if not baseline or rmssd is None:
@@ -204,8 +205,45 @@ else:
 
         df["state_value"] = df["hrv_rmssd"].apply(lambda x: get_state_value(x, baseline_rmssd))
 
-        st.subheader(f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten")
-        st.line_chart(df[["state_value"]])
+        colors = {
+            1: "#2ecc71",  # Flow
+            2: "#f1c40f",  # Balanced
+            3: "#f39c12",  # Mild Stress
+            4: "#e74c3c"   # High Stress
+        }
+
+        fig = go.Figure()
+
+        for state_value, color in colors.items():
+            state_df = df[df["state_value"] == state_value]
+            if not state_df.empty:
+                fig.add_trace(go.Scatter(
+                    x=state_df.index,
+                    y=state_df["state_value"],
+                    mode="lines",
+                    line=dict(width=0.5, color=color),
+                    fill="tozeroy",
+                    fillcolor=color,
+                    name={1: "Recovery / Flow", 2: "Balanced", 3: "Mild Stress", 4: "High Stress"}[state_value],
+                    opacity=0.7
+                ))
+
+        fig.update_layout(
+            title=f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten",
+            yaxis=dict(
+                tickvals=[1, 2, 3, 4],
+                ticktext=["Flow", "Balanced", "Mild Stress", "High Stress"],
+                range=[0.5, 4.5],
+                title="Zustand"
+            ),
+            xaxis_title="Zeit",
+            showlegend=True,
+            template="plotly_white",
+            height=400,
+            margin=dict(l=40, r=40, t=50, b=40)
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
 
     # === Letzte Werte ===
     st.subheader("🕒 Letzte Messwerte")
