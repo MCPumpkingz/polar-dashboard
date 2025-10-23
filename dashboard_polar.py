@@ -7,6 +7,13 @@ import pytz
 from streamlit_autorefresh import st_autorefresh
 import plotly.graph_objects as go  # für farbige Timeline
 
+# Sicherstellen, dass Plotly installiert ist
+try:
+    import plotly.graph_objects as go
+except ModuleNotFoundError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "plotly"])
+    import plotly.graph_objects as go
+
 # === Seitenkonfiguration ===
 st.set_page_config(page_title="Polar SAMAY H10 Live Dashboard", layout="wide")
 
