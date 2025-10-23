@@ -187,5 +187,26 @@ else:
     st.subheader(f"💓 HRV Parameter (RMSSD & SDNN) – letzte {window_minutes} Minuten")
     st.line_chart(df[["hrv_rmssd", "hrv_sdnn"]])
 
+    # === 🧭 State Timeline ===
+    if not df.empty and "hrv_rmssd" in df.columns:
+        def get_state_value(rmssd, baseline):
+            if not baseline or rmssd is None:
+                return None
+            ratio = rmssd / baseline
+            if ratio < 0.7:
+                return 4
+            elif ratio < 1.0:
+                return 3
+            elif ratio < 1.3:
+                return 2
+            else:
+                return 1
+
+        df["state_value"] = df["hrv_rmssd"].apply(lambda x: get_state_value(x, baseline_rmssd))
+
+        st.subheader(f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten")
+        st.line_chart(df[["state_value"]])
+
+    # === Letzte Werte ===
     st.subheader("🕒 Letzte Messwerte")
     st.dataframe(df.tail(10))
