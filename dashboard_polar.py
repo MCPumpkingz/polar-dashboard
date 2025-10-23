@@ -13,6 +13,22 @@ st_autorefresh(interval=1000, key="datarefresh")
 
 st.title("📊 Polar H10 Live Dashboard")
 
+from datetime import datetime
+import pytz
+
+# Zeitzone definieren (CET = Europe/Zurich)
+tz = pytz.timezone("Europe/Zurich")
+
+# Aktuelle Uhrzeit holen
+now = datetime.now(tz)
+current_time = now.strftime("%H:%M:%S")
+
+# Anzeige oben rechts
+st.markdown(
+    f"<div style='text-align:right; color:gray; font-size:16px;'>🕒 Letztes Update: {current_time} (CET)</div>",
+    unsafe_allow_html=True
+)
+
 # 🔗 MongoDB Verbindung
 MONGO_URI = os.getenv("MONGO_URI") or "mongodb+srv://cocuzzam:MCETH2025@nightscout-db.21jfrwe.mongodb.net/nightscout-db?retryWrites=true&w=majority"
 client = MongoClient(MONGO_URI)
