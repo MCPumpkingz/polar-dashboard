@@ -146,48 +146,53 @@ else:
                 1
             )
 
-        # === Drei-Spalten-Layout ===
+        # --- Layout: Ampel | Beschreibung | Empfehlung ---
         col1, col2, col3 = st.columns([1, 2, 2])
 
-        # Spalte 1: Ampel
+        # === Spalte 1: Ampel ===
         with col1:
             st.markdown("<h4 style='text-align:center;'>🧭 Status</h4>", unsafe_allow_html=True)
+
             colors = ["#2ecc71", "#f1c40f", "#f39c12", "#e74c3c"]
-            lamp_html = "<div style='display:flex; flex-direction:column; align-items:center; justify-content:center;'>"
+            lamp_html_parts = []
             for i, c in enumerate(colors, start=1):
                 active = (i == level)
-                lamp_html += f"""
-                    <div style='width:42px; height:42px; border-radius:50%;
-                                background-color:{c if active else "#e6e6e6"};
-                                margin:8px 0;
-                                box-shadow:{'0 0 16px ' + c if active else 'inset 0 0 4px #ccc'};
-                                opacity:{'1' if active else '0.4'};
-                                transition:all 0.3s ease;'></div>
-                """
-            lamp_html += "</div>"
+                lamp_html_parts.append(
+                    f"<div style='width:42px; height:42px; border-radius:50%; "
+                    f"background-color:{c if active else '#e6e6e6'}; "
+                    f"margin:8px 0; "
+                    f"box-shadow:{'0 0 16px ' + c if active else 'inset 0 0 4px #ccc'}; "
+                    f"opacity:{'1' if active else '0.4'}; "
+                    f"transition:all 0.3s ease;'></div>"
+                )
+
+            lamp_html = (
+                "<div style='display:flex; flex-direction:column; align-items:center; justify-content:center;'>"
+                + "".join(lamp_html_parts)
+                + "</div>"
+            )
             st.markdown(lamp_html, unsafe_allow_html=True)
 
-        # Spalte 2: Zustand
+        # === Spalte 2: Zustand ===
         with col2:
-            st.markdown(f"""
-                <div style='text-align:center;'>
-                    <h3 style='color:{color}; margin-bottom:6px;'>{state}</h3>
-                    <p style='font-size:16px; color:#333; line-height:1.5; max-width:90%; margin:0 auto;'>
-                        {description}
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
+            state_html = (
+                f"<div style='text-align:center;'>"
+                f"<h3 style='color:{color}; margin-bottom:6px;'>{state}</h3>"
+                f"<p style='font-size:16px; color:#333; line-height:1.5; max-width:90%; margin:0 auto;'>"
+                f"{description}</p></div>"
+            )
+            st.markdown(state_html, unsafe_allow_html=True)
 
-        # Spalte 3: Empfehlung
+        # === Spalte 3: Empfehlung ===
         with col3:
-            st.markdown(f"""
-                <div style='text-align:center;'>
-                    <h4 style='margin-bottom:6px;'>💡 Empfehlung</h4>
-                    <p style='font-size:15px; color:#444; line-height:1.5; max-width:90%; margin:0 auto;'>
-                        {recommendation}
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
+            rec_html = (
+                f"<div style='text-align:center;'>"
+                f"<h4 style='margin-bottom:6px;'>💡 Empfehlung</h4>"
+                f"<p style='font-size:15px; color:#444; line-height:1.5; max-width:90%; margin:0 auto;'>"
+                f"{recommendation}</p></div>"
+            )
+            st.markdown(rec_html, unsafe_allow_html=True)
+
     else:
         st.info("Warte auf ausreichende HRV-Daten zur neurophysiologischen Analyse …")
 
