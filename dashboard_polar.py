@@ -9,7 +9,7 @@ from streamlit_autorefresh import st_autorefresh
 # === Seitenkonfiguration ===
 st.set_page_config(page_title="Polar SAMAY H10 Live Dashboard", layout="wide")
 
-# === Weißes minimalistisches Design & Helvetica ===
+# === Globales Styling (Helvetica, Clean, Weiß) ===
 st.markdown("""
     <style>
         html, body, [class*="st-"] {
@@ -28,15 +28,6 @@ st.markdown("""
             background-color: white !important;
         }
 
-        .metric-value {
-            font-size: 24px !important;
-            color: #111 !important;
-        }
-
-        .metric-label {
-            color: #666 !important;
-        }
-
         div.block-container {
             padding-top: 1rem;
             padding-bottom: 1rem;
@@ -52,13 +43,13 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 🔁 Dashboard aktualisiert sich jede Sekunde
+# === Auto-Refresh ===
 st_autorefresh(interval=1000, key="datarefresh")
 
 # === Titel ===
 st.title("📊 Polar SAMAY H10 Live Dashboard")
 
-# 🕒 Aktuelle Zeit (CET)
+# === Aktuelle Zeit (CET) ===
 tz = pytz.timezone("Europe/Zurich")
 now = datetime.now(tz)
 st.markdown(
@@ -93,7 +84,7 @@ else:
     df["timestamp"] = df["timestamp"].dt.tz_convert("Europe/Zurich")
     df = df.set_index("timestamp").sort_index()
 
-    # --- Zeitfenster definieren ---
+    # === Fenster definieren ===
     baseline_window = df.last("10min")
     recent_data = df.last("60s")
 
@@ -116,7 +107,6 @@ else:
     if baseline_rmssd and avg_rmssd:
         delta_rmssd = avg_rmssd / baseline_rmssd
 
-        # --- Zustände ---
         if delta_rmssd < 0.7:
             state, color, description, recommendation, level = (
                 "High Stress", "#e74c3c",
@@ -146,41 +136,31 @@ else:
                 1
             )
 
-        # --- Layout: Ampel (horizontal) | Zustand | Empfehlung ---
+        # === Layout: Ampel (horizontal) | Zustand | Empfehlung ===
         col1, col2, col3 = st.columns([2, 3, 3])
-
-        header_style = (
-            "font-size:18px; font-weight:600; text-align:center; "
-            "color:#111; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;"
-        )
+        header_style = "font-size:18px; font-weight:600; text-align:center; color:#111; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;"
 
         # === Spalte 1: Ampel horizontal ===
         with col1:
             st.markdown(f"<div style='{header_style}'>🧭 Status</div>", unsafe_allow_html=True)
-
             colors = ["#2ecc71", "#f1c40f", "#f39c12", "#e74c3c"]
-            lamp_html = "<div style='display:flex; justify-content:center; align-items:center; gap:16px; margin-top:12px;'>"
-
+            circles = []
             for i, c in enumerate(colors, start=1):
                 active = (i == level)
-                lamp_html += f"""
-                    <div style='width:42px; height:42px; border-radius:50%;
-                                background-color:{c if active else "#e6e6e6"};
-                                box-shadow:{'0 0 16px ' + c if active else 'inset 0 0 4px #ccc'};
-                                opacity:{'1' if active else '0.5'};
-                                transition:all 0.3s ease;'>
-                    </div>
-                """
-            lamp_html += "</div>"
+                circles.append(
+                    f"<div style='width:42px; height:42px; border-radius:50%; background-color:{c if active else '#e6e6e6'}; "
+                    f"box-shadow:{'0 0 16px ' + c if active else 'inset 0 0 4px #ccc'}; opacity:{'1' if active else '0.5'};'></div>"
+                )
+            lamp_html = "<div style='display:flex; justify-content:center; align-items:center; gap:16px; margin-top:12px;'>" + "".join(circles) + "</div>"
             st.markdown(lamp_html, unsafe_allow_html=True)
 
         # === Spalte 2: Zustand ===
         with col2:
             st.markdown(f"<div style='{header_style}'>🧠 Zustand</div>", unsafe_allow_html=True)
             st.markdown(f"""
-                <div style='text-align:center; font-family:Helvetica, Arial, sans-serif;'>
-                    <h3 style='color:{color}; margin-bottom:6px; font-family:Helvetica, Arial, sans-serif;'>{state}</h3>
-                    <p style='font-size:16px; color:#333; line-height:1.5; max-width:90%; margin:0 auto; font-family:Helvetica, Arial, sans-serif;'>
+                <div style='text-align:center;'>
+                    <h3 style='color:{color}; margin-bottom:6px;'>{state}</h3>
+                    <p style='font-size:16px; color:#333; line-height:1.5; max-width:90%; margin:0 auto;'>
                         {description}
                     </p>
                 </div>
@@ -190,8 +170,8 @@ else:
         with col3:
             st.markdown(f"<div style='{header_style}'>💡 Empfehlung</div>", unsafe_allow_html=True)
             st.markdown(f"""
-                <div style='text-align:center; font-family:Helvetica, Arial, sans-serif;'>
-                    <p style='font-size:15px; color:#444; line-height:1.5; max-width:90%; margin:0 auto; font-family:Helvetica, Arial, sans-serif;'>
+                <div style='text-align:center;'>
+                    <p style='font-size:15px; color:#444; line-height:1.5; max-width:90%; margin:0 auto;'>
                         {recommendation}
                     </p>
                 </div>
