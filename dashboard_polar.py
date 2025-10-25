@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 from pymongo import MongoClient
@@ -44,6 +43,9 @@ st.markdown("""
             border-radius:8px;
             font-size:15px;
             margin-top:8px;
+        }
+        table.metrics-table td {
+            border-bottom: 1px solid #eee;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -104,185 +106,97 @@ if not df_polar.empty:
 
     baseline_rmssd = baseline_window["hrv_rmssd"].mean() if not baseline_window.empty else None
 
-# --- Metriken anzeigen ---
-colA, colB = st.columns(2)
+    # --- Metriken anzeigen ---
+    colA, colB = st.columns(2)
 
-with colA:
-    if avg_hr_60s:
-        st.markdown(f"""
-            <div style='text-align:center;'>
-                <div style='font-size:18px;font-weight:600;margin-bottom:4px;'>❤️ Herzfrequenz (HR)</div>
-                <div style='font-size:26px;font-weight:600;color:#e74c3c;'>{avg_hr_60s:.1f} bpm</div>
-                <div style='font-size:14px;color:#555;margin-top:4px;'>
-                    Ø (60 s): {avg_hr_60s:.1f} | (5 min): {avg_hr_5min:.1f} | (Fenster {window_minutes} min): {avg_hr_window:.1f}
+    with colA:
+        if avg_hr_60s:
+            st.markdown(f"""
+                <div style='text-align:center;'>
+                    <div style='font-size:18px;font-weight:600;margin-bottom:4px;'>❤️ Herzfrequenz (HR)</div>
+                    <div style='font-size:28px;font-weight:600;color:#e74c3c;margin-bottom:6px;'>{avg_hr_60s:.1f} bpm</div>
+                    <table class='metrics-table' style='margin:0 auto; border-collapse:collapse; font-size:15px;'>
+                        <tr><td style='padding:3px 8px; font-weight:500;'>Kurzzeit-HR (60 s)</td><td style='padding:3px 8px;'>{avg_hr_60s:.1f} bpm</td></tr>
+                        <tr><td style='padding:3px 8px; font-weight:500;'>Standard-HR (5 min)</td><td style='padding:3px 8px;'>{avg_hr_5min:.1f} bpm</td></tr>
+                        <tr><td style='padding:3px 8px; font-weight:500;'>Langzeit-HR (Fenster {window_minutes} min)</td><td style='padding:3px 8px;'>{avg_hr_window:.1f} bpm</td></tr>
+                    </table>
                 </div>
-            </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("<div class='no-data-box'>Keine Herzfrequenzdaten verfügbar.</div>", unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("<div class='no-data-box'>Keine Herzfrequenzdaten verfügbar.</div>", unsafe_allow_html=True)
 
-with colB:
-    if avg_rmssd_60s:
-        st.markdown(f"""
-            <div style='text-align:center;'>
-                <div style='font-size:18px;font-weight:600;margin-bottom:4px;'>💓 HRV – RMSSD</div>
-                <div style='font-size:26px;font-weight:600;color:#2980b9;'>{avg_rmssd_60s*1000:.1f} ms</div>
-                <div style='font-size:14px;color:#555;margin-top:4px;'>
-                    Ø (60 s): {avg_rmssd_60s*1000:.1f} | (5 min): {avg_rmssd_5min*1000:.1f} | (Fenster {window_minutes} min): {avg_rmssd_window*1000:.1f}
+    with colB:
+        if avg_rmssd_60s:
+            st.markdown(f"""
+                <div style='text-align:center;'>
+                    <div style='font-size:18px;font-weight:600;margin-bottom:4px;'>💓 HRV – RMSSD</div>
+                    <div style='font-size:28px;font-weight:600;color:#2980b9;margin-bottom:6px;'>{avg_rmssd_60s*1000:.1f} ms</div>
+                    <table class='metrics-table' style='margin:0 auto; border-collapse:collapse; font-size:15px;'>
+                        <tr><td style='padding:3px 8px; font-weight:500;'>Kurzzeit-RMSSD (60 s)</td><td style='padding:3px 8px;'>{avg_rmssd_60s*1000:.1f} ms</td></tr>
+                        <tr><td style='padding:3px 8px; font-weight:500;'>Standard-RMSSD (5 min)</td><td style='padding:3px 8px;'>{avg_rmssd_5min*1000:.1f} ms</td></tr>
+                        <tr><td style='padding:3px 8px; font-weight:500;'>Langzeit-RMSSD (Fenster {window_minutes} min)</td><td style='padding:3px 8px;'>{avg_rmssd_window*1000:.1f} ms</td></tr>
+                    </table>
                 </div>
-            </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("<div class='no-data-box'>Keine HRV-Daten verfügbar.</div>", unsafe_allow_html=True)
+
+    # --- Zustand bestimmen ---
+    if baseline_rmssd and avg_rmssd_60s:
+        delta_rmssd = avg_rmssd_60s / baseline_rmssd
+        if delta_rmssd < 0.7:
+            state, color, desc, reco, level = (
+                "High Stress", "#e74c3c",
+                "Stark sympathische Aktivierung – **Fight or Flight**.",
+                "🌬️ 4-7-8-Atmung oder 6 Atemzüge/min zur Aktivierung des Vagusnervs.", 4)
+        elif delta_rmssd < 1.0:
+            state, color, desc, reco, level = (
+                "Mild Stress", "#f39c12",
+                "Leichte sympathische Aktivierung – du bist **fokussiert**, aber angespannt.",
+                "🫁 Längeres Ausatmen (4 s ein / 8 s aus).", 3)
+        elif delta_rmssd < 1.3:
+            state, color, desc, reco, level = (
+                "Balanced", "#f1c40f",
+                "Dein Nervensystem ist in **Balance**.",
+                "☯️ Box Breathing (4-4-4-4) zur Stabilisierung.", 2)
+        else:
+            state, color, desc, reco, level = (
+                "Recovery / Flow", "#2ecc71",
+                "Hohe parasympathische Aktivität – du bist im **Erholungsmodus**.",
+                "🧘 Meditation oder ruhige Atmung fördern Flow & Regeneration.", 1)
+
+        # --- Layout: Ampel + Textblöcke ---
+        st.markdown("### 🧠 Neurophysiologischer Zustand (aktuell)")
+        col1, col2, col3 = st.columns([2, 3, 3])
+        header = "font-size:18px;font-weight:600;text-align:center;color:#111;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;"
+
+        # Ampel
+        with col1:
+            st.markdown(f"<div style='{header}'>🧭 Status</div>", unsafe_allow_html=True)
+            colors = ["#2ecc71", "#f1c40f", "#f39c12", "#e74c3c"]
+            circles = []
+            for i, c in enumerate(colors, start=1):
+                active = (i == level)
+                circles.append(
+                    f"<div style='width:42px;height:42px;border-radius:50%;background-color:{c if active else '#e6e6e6'};"
+                    f"box-shadow:{'0 0 16px ' + c if active else 'inset 0 0 4px #ccc'};opacity:{'1' if active else '0.5'};'></div>"
+                )
+            lamp_html = "<div style='display:flex;justify-content:center;align-items:center;gap:16px;margin-top:12px;'>" + "".join(circles) + "</div>"
+            st.markdown(lamp_html, unsafe_allow_html=True)
+
+        # Zustand
+        with col2:
+            st.markdown(f"<div style='{header}'>🧠 Zustand</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:center;'><h3 style='color:{color};margin-bottom:6px;'>{state}</h3>"
+                        f"<p style='font-size:16px;color:#333;line-height:1.5;max-width:90%;margin:0 auto;'>{desc}</p></div>",
+                        unsafe_allow_html=True)
+
+        # Empfehlung
+        with col3:
+            st.markdown(f"<div style='{header}'>💡 Empfehlung</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:center;'><p style='font-size:15px;color:#444;line-height:1.5;max-width:90%;margin:0 auto;'>{reco}</p></div>",
+                        unsafe_allow_html=True)
     else:
-        st.markdown("<div class='no-data-box'>Keine HRV-Daten verfügbar.</div>", unsafe_allow_html=True)
-
-# --- Zustand bestimmen ---
-if baseline_rmssd and avg_rmssd_60s:
-    delta_rmssd = avg_rmssd_60s / baseline_rmssd
-    if delta_rmssd < 0.7:
-        state, color, desc, reco, level = (
-            "High Stress", "#e74c3c",
-            "Stark sympathische Aktivierung – **Fight or Flight**.",
-            "🌬️ 4-7-8-Atmung oder 6 Atemzüge/min zur Aktivierung des Vagusnervs.", 4)
-    elif delta_rmssd < 1.0:
-        state, color, desc, reco, level = (
-            "Mild Stress", "#f39c12",
-            "Leichte sympathische Aktivierung – du bist **fokussiert**, aber angespannt.",
-            "🫁 Längeres Ausatmen (4 s ein / 8 s aus).", 3)
-    elif delta_rmssd < 1.3:
-        state, color, desc, reco, level = (
-            "Balanced", "#f1c40f",
-            "Dein Nervensystem ist in **Balance**.",
-            "☯️ Box Breathing (4-4-4-4) zur Stabilisierung.", 2)
-    else:
-        state, color, desc, reco, level = (
-            "Recovery / Flow", "#2ecc71",
-            "Hohe parasympathische Aktivität – du bist im **Erholungsmodus**.",
-            "🧘 Meditation oder ruhige Atmung fördern Flow & Regeneration.", 1)
-
-    # --- Layout: Ampel + Textblöcke ---
-    st.markdown("### 🧠 Neurophysiologischer Zustand (aktuell)")
-    col1, col2, col3 = st.columns([2, 3, 3])
-    header = "font-size:18px;font-weight:600;text-align:center;color:#111;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;"
-
-    # Ampel
-    with col1:
-        st.markdown(f"<div style='{header}'>🧭 Status</div>", unsafe_allow_html=True)
-        colors = ["#2ecc71", "#f1c40f", "#f39c12", "#e74c3c"]
-        circles = []
-        for i, c in enumerate(colors, start=1):
-            active = (i == level)
-            circles.append(
-                f"<div style='width:42px;height:42px;border-radius:50%;background-color:{c if active else '#e6e6e6'};"
-                f"box-shadow:{'0 0 16px ' + c if active else 'inset 0 0 4px #ccc'};opacity:{'1' if active else '0.5'};'></div>"
-            )
-        lamp_html = "<div style='display:flex;justify-content:center;align-items:center;gap:16px;margin-top:12px;'>" + "".join(circles) + "</div>"
-        st.markdown(lamp_html, unsafe_allow_html=True)
-
-    # Zustand
-    with col2:
-        st.markdown(f"<div style='{header}'>🧠 Zustand</div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='text-align:center;'><h3 style='color:{color};margin-bottom:6px;'>{state}</h3>"
-                    f"<p style='font-size:16px;color:#333;line-height:1.5;max-width:90%;margin:0 auto;'>{desc}</p></div>",
-                    unsafe_allow_html=True)
-
-    # Empfehlung
-    with col3:
-        st.markdown(f"<div style='{header}'>💡 Empfehlung</div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='text-align:center;'><p style='font-size:15px;color:#444;line-height:1.5;max-width:90%;margin:0 auto;'>{reco}</p></div>",
-                    unsafe_allow_html=True)
+        st.markdown("<div class='no-data-box'>Warte auf ausreichende HRV-Daten zur Analyse …</div>", unsafe_allow_html=True)
 else:
-    st.markdown("<div class='no-data-box'>Warte auf ausreichende HRV-Daten zur Analyse …</div>", unsafe_allow_html=True)
-
-
-# === Gesamtdiagramm Rohdaten ===
-st.subheader(f"📈 Gesamtsignal-Übersicht – letzte {window_minutes} Minuten")
-if not df_polar.empty or not df_glucose.empty:
-    fig = go.Figure()
-    if "hr" in df_polar.columns:
-        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], name="Herzfrequenz (bpm)",
-                                 line=dict(color="#e74c3c", width=2)))
-    if "hrv_rmssd" in df_polar.columns:
-        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000,
-                                 name="HRV RMSSD (ms)", line=dict(color="#2980b9", width=2, dash="dot"), yaxis="y2"))
-    if "sgv" in df_glucose.columns:
-        fig.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"], name="Glukose (mg/dL)",
-                                 line=dict(color="#27ae60", width=2), yaxis="y3"))
-    fig.update_layout(
-        template="plotly_white", height=500,
-        xaxis=dict(title="Zeit"),
-        yaxis=dict(title="HR (bpm)"),
-        yaxis2=dict(title="HRV (ms)", overlaying="y", side="right", position=0.9, showgrid=False),
-        yaxis3=dict(title="Glukose (mg/dL)", overlaying="y", side="right", position=1.0, showgrid=False),
-        legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5),
-        margin=dict(l=60, r=60, t=10, b=40)
-    )
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.markdown("<div class='no-data-box'>Keine Daten zum Anzeigen gefunden.</div>", unsafe_allow_html=True)
-
-
-# === Einzelcharts ===
-st.subheader(f"❤️ Herzfrequenz (HR) – letzte {window_minutes} Minuten")
-if not df_polar.empty and "hr" in df_polar.columns:
-    st.line_chart(df_polar[["hr"]])
-else:
-    st.markdown("<div class='no-data-box'>Keine Herzfrequenzdaten verfügbar.</div>", unsafe_allow_html=True)
-
-st.subheader(f"💓 HRV-Parameter (RMSSD & SDNN) – letzte {window_minutes} Minuten")
-if not df_polar.empty and all(col in df_polar.columns for col in ["hrv_rmssd", "hrv_sdnn"]):
-    st.line_chart(df_polar[["hrv_rmssd", "hrv_sdnn"]])
-else:
-    st.markdown("<div class='no-data-box'>Keine HRV-Daten verfügbar.</div>", unsafe_allow_html=True)
-
-st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
-if not df_glucose.empty and "sgv" in df_glucose.columns:
-    st.line_chart(df_glucose[["sgv"]])
-else:
-    st.markdown("<div class='no-data-box'>Keine CGM-Daten verfügbar.</div>", unsafe_allow_html=True)
-
-
-# === Zustand Verlauf ===
-st.subheader(f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten")
-if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
-    baseline_rmssd = df_polar["hrv_rmssd"].last("10min").mean()
-    def get_state_value(rmssd, baseline):
-        if not baseline or rmssd is None:
-            return None
-        ratio = rmssd / baseline
-        if ratio < 0.7: return 4
-        elif ratio < 1.0: return 3
-        elif ratio < 1.3: return 2
-        else: return 1
-
-    df_polar["state_value"] = df_polar["hrv_rmssd"].apply(lambda x: get_state_value(x, baseline_rmssd))
-    colors = {1:"#2ecc71",2:"#f1c40f",3:"#f39c12",4:"#e74c3c"}
-
-    fig_state = go.Figure()
-    for sv, color in colors.items():
-        sd = df_polar[df_polar["state_value"] == sv]
-        if not sd.empty:
-            fig_state.add_trace(go.Scatter(x=sd.index, y=sd["state_value"], mode="lines",
-                                           line=dict(width=0.5, color=color), fill="tozeroy", fillcolor=color,
-                                           name={1:"Flow",2:"Balanced",3:"Mild Stress",4:"High Stress"}[sv], opacity=0.7))
-    fig_state.update_layout(
-        yaxis=dict(tickvals=[1,2,3,4],ticktext=["Flow","Balanced","Mild Stress","High Stress"],range=[0.5,4.5],title="Zustand"),
-        xaxis_title="Zeit", showlegend=True, template="plotly_white", height=400,
-        margin=dict(l=40,r=40,t=10,b=40)
-    )
-    st.plotly_chart(fig_state, use_container_width=True)
-else:
-    st.markdown("<div class='no-data-box'>Keine ausreichenden HRV-Daten zur Bestimmung des Zustandes.</div>", unsafe_allow_html=True)
-
-
-# === Tabellen ===
-if not df_polar.empty:
-    st.subheader("🕒 Letzte Polar-Messwerte")
-    st.dataframe(df_polar.tail(10))
-else:
-    st.markdown("<div class='no-data-box'>Keine Polar-Messwerte verfügbar.</div>", unsafe_allow_html=True)
-
-if not df_glucose.empty:
-    st.subheader("🕒 Letzte CGM-Messwerte")
-    st.dataframe(df_glucose.tail(10))
-else:
-    st.markdown("<div class='no-data-box'>Keine CGM-Messwerte verfügbar.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='no-data-box'>Keine Polar-Daten im angegebenen Zeitraum gefunden.</div>", unsafe_allow_html=True)
