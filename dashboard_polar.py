@@ -104,22 +104,36 @@ if not df_polar.empty:
 
     baseline_rmssd = baseline_window["hrv_rmssd"].mean() if not baseline_window.empty else None
 
-    # --- Metriken anzeigen ---
-    colA, colB = st.columns(2)
-    with colA:
-        if avg_hr_60s:
-            st.metric(
-                "❤️ Herzfrequenz (HR)",
-                f"{avg_hr_60s:.1f} bpm",
-                help=f"HR(60 s): {avg_hr_60s:.1f} bpm | HR(5 min): {avg_hr_5min:.1f} bpm | HR({window_minutes} min): {avg_hr_window:.1f} bpm"
-            )
-    with colB:
-        if avg_rmssd_60s:
-            st.metric(
-                "💓 HRV – RMSSD",
-                f"{avg_rmssd_60s*1000:.1f} ms",
-                help=f"RMSSD(60 s): {avg_rmssd_60s*1000:.1f} ms | RMSSD(5 min): {avg_rmssd_5min*1000:.1f} ms | RMSSD({window_minutes} min): {avg_rmssd_window*1000:.1f} ms"
-            )
+# --- Metriken anzeigen ---
+colA, colB = st.columns(2)
+
+with colA:
+    if avg_hr_60s:
+        st.markdown(f"""
+            <div style='text-align:center;'>
+                <div style='font-size:18px;font-weight:600;margin-bottom:4px;'>❤️ Herzfrequenz (HR)</div>
+                <div style='font-size:26px;font-weight:600;color:#e74c3c;'>{avg_hr_60s:.1f} bpm</div>
+                <div style='font-size:14px;color:#555;margin-top:4px;'>
+                    Ø (60 s): {avg_hr_60s:.1f} | (5 min): {avg_hr_5min:.1f} | (Fenster {window_minutes} min): {avg_hr_window:.1f}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='no-data-box'>Keine Herzfrequenzdaten verfügbar.</div>", unsafe_allow_html=True)
+
+with colB:
+    if avg_rmssd_60s:
+        st.markdown(f"""
+            <div style='text-align:center;'>
+                <div style='font-size:18px;font-weight:600;margin-bottom:4px;'>💓 HRV – RMSSD</div>
+                <div style='font-size:26px;font-weight:600;color:#2980b9;'>{avg_rmssd_60s*1000:.1f} ms</div>
+                <div style='font-size:14px;color:#555;margin-top:4px;'>
+                    Ø (60 s): {avg_rmssd_60s*1000:.1f} | (5 min): {avg_rmssd_5min*1000:.1f} | (Fenster {window_minutes} min): {avg_rmssd_window*1000:.1f}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='no-data-box'>Keine HRV-Daten verfügbar.</div>", unsafe_allow_html=True)
 
     # --- Zustand bestimmen ---
     if baseline_rmssd and avg_rmssd_60s:
