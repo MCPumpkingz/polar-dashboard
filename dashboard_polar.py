@@ -34,9 +34,15 @@ st.markdown("""
         div.block-container {
             padding: 1rem 2rem;
         }
-        .stAlert {
-            background-color: #f6f8fa !important;
-            border-radius: 10px !important;
+        .no-data-box {
+            text-align:center;
+            color:#777;
+            background:#f9f9f9;
+            border:1px solid #ddd;
+            padding:12px;
+            border-radius:8px;
+            font-size:15px;
+            margin-top:8px;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -79,6 +85,7 @@ df_glucose = pd.DataFrame(glucose_data)
 if not df_glucose.empty:
     df_glucose["timestamp"] = pd.to_datetime(df_glucose["dateString"], errors="coerce")
     df_glucose = df_glucose.set_index("timestamp").sort_index()
+
 
 # === Neurophysiologischer Zustand berechnen ===
 if not df_polar.empty:
@@ -154,7 +161,10 @@ if not df_polar.empty:
             st.markdown(f"<div style='text-align:center;'><p style='font-size:15px;color:#444;line-height:1.5;max-width:90%;margin:0 auto;'>{reco}</p></div>",
                         unsafe_allow_html=True)
     else:
-        st.info("Warte auf ausreichende HRV-Daten zur Analyse …")
+        st.markdown("<div class='no-data-box'>Warte auf ausreichende HRV-Daten zur Analyse …</div>", unsafe_allow_html=True)
+else:
+    st.markdown("<div class='no-data-box'>Keine Polar-Daten im angegebenen Zeitraum gefunden.</div>", unsafe_allow_html=True)
+
 
 # === Gesamtdiagramm Rohdaten ===
 st.subheader(f"📈 Rohdaten-Übersicht – letzte {window_minutes} Minuten")
@@ -180,21 +190,34 @@ if not df_polar.empty or not df_glucose.empty:
     )
     st.plotly_chart(fig, use_container_width=True)
 else:
-    st.warning("Keine Daten zum Anzeigen gefunden.")
+    st.markdown("<div class='no-data-box'>Keine Daten zum Anzeigen gefunden.</div>", unsafe_allow_html=True)
 
 
 # === Einzelcharts ===
-if not df_polar.empty:
-    st.subheader(f"❤️ Herzfrequenz (HR) – letzte {window_minutes} Minuten")
+
+# ❤️ Herzfrequenz
+st.subheader(f"❤️ Herzfrequenz (HR) – letzte {window_minutes} Minuten")
+if not df_polar.empty and "hr" in df_polar.columns:
     st.line_chart(df_polar[["hr"]])
-    st.subheader(f"💓 HRV-Parameter (RMSSD & SDNN) – letzte {window_minutes} Minuten")
+else:
+    st.markdown("<div class='no-data-box'>Keine Herzfrequenzdaten im angegebenen Zeitraum gefunden.</div>", unsafe_allow_html=True)
+
+# 💓 HRV
+st.subheader(f"💓 HRV-Parameter (RMSSD & SDNN) – letzte {window_minutes} Minuten")
+if not df_polar.empty and all(col in df_polar.columns for col in ["hrv_rmssd", "hrv_sdnn"]):
     st.line_chart(df_polar[["hrv_rmssd", "hrv_sdnn"]])
+else:
+    st.markdown("<div class='no-data-box'>Keine HRV-Daten im angegebenen Zeitraum gefunden.</div>", unsafe_allow_html=True)
 
-if not df_glucose.empty:
-    st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
+# 🩸 CGM
+st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
+if not df_glucose.empty and "sgv" in df_glucose.columns:
     st.line_chart(df_glucose[["sgv"]])
+else:
+    st.markdown("<div class='no-data-box'>Keine CGM-Daten im angegebenen Zeitraum gefunden.</div>", unsafe_allow_html=True)
 
-# === Verlauf Neurophysiologischer Zustand ===
+# 🧠 Zustand Verlauf
+st.subheader(f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten")
 if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
     baseline_rmssd = df_polar["hrv_rmssd"].last("10min").mean()
     def get_state_value(rmssd, baseline):
@@ -209,7 +232,6 @@ if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
     df_polar["state_value"] = df_polar["hrv_rmssd"].apply(lambda x: get_state_value(x, baseline_rmssd))
     colors = {1:"#2ecc71",2:"#f1c40f",3:"#f39c12",4:"#e74c3c"}
 
-    st.subheader(f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten")
     fig_state = go.Figure()
     for sv, color in colors.items():
         sd = df_polar[df_polar["state_value"] == sv]
@@ -223,11 +245,19 @@ if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
         margin=dict(l=40,r=40,t=10,b=40)
     )
     st.plotly_chart(fig_state, use_container_width=True)
+else:
+    st.markdown("<div class='no-data-box'>Keine ausreichenden HRV-Daten zur Bestimmung des Zustandes verfügbar.</div>", unsafe_allow_html=True)
+
 
 # === Tabellen ===
 if not df_polar.empty:
     st.subheader("🕒 Letzte Polar-Messwerte")
     st.dataframe(df_polar.tail(10))
+else:
+    st.markdown("<div class='no-data-box'>Keine Polar-Messwerte verfügbar.</div>", unsafe_allow_html=True)
+
 if not df_glucose.empty:
     st.subheader("🕒 Letzte CGM-Messwerte")
     st.dataframe(df_glucose.tail(10))
+else:
+    st.markdown("<div class='no-data-box'>Keine CGM-Messwerte verfügbar.</div>", unsafe_allow_html=True)
