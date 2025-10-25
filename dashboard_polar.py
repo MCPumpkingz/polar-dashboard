@@ -44,68 +44,6 @@ st.markdown("""
             font-size:15px;
             margin-top:8px;
         }
-    </style>
-""", unsafe_allow_html=True)
-
-# === Auto-Refresh ===
-st_autorefresh(interval=2000, key="datarefresh")
-
-# === Titel & Zeit ===
-st.title("📊 Biofeedback System – Polar H10 & CGM Live Dashboard")
-
-tz = pytz.timezone("Europe/Zurich")
-now = datetime.now(tz)
-st.markdown(f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>", unsafe_allow_html=True)
-st.info("📡 Echtzeitdaten aktiv – Anzeigezeitraum einstellbar im Seitenmenü")
-
-# === MongoDB Verbindung ===
-MONGO_URI = os.getenv("MONGO_URI") or "mongodb+srv://cocuzzam:MCETH2025@nightscout-db.21jfrwe.mongodb.net/?retryWrites=true&w=majority"
-client = MongoClient(MONGO_URI)
-db_polar = client["nightscout-db"]
-col_polar = db_polar["polar_data"]
-db_glucose = client["nightscout"]
-col_glucose = db_glucose["entries"]
-
-# === Seitenleiste ===
-st.sidebar.header("⚙️ Einstellungen")
-window_minutes = st.sidebar.slider("Zeitfenster (in Minuten)", 5, 60, 15)
-time_threshold = now - timedelta(minutes=window_minutes)
-
-# === Daten laden ===
-polar_data = list(col_polar.find({"timestamp": {"$gte": time_threshold.isoformat()}}).sort("timestamp", 1))
-df_polar = pd.DataFrame(polar_data)
-if not df_polar.empty:
-    df_polar["timestamp"] = pd.to_datetime(df_polar["timestamp"], errors="coerce")
-    df_polar = df_polar.set_index("timestamp").sort_index()
-
-glucose_data = list(col_glucose.find({"dateString": {"$gte": time_threshold.isoformat()}}).sort("dateString", 1))
-df_glucose = pd.DataFrame(glucose_data)
-if not df_glucose.empty:
-    df_glucose["timestamp"] = pd.to_datetime(df_glucose["dateString"], errors="coerce")
-    df_glucose = df_glucose.set_index("timestamp").sort_index()
-
-# === HR / HRV Berechnungen ===
-if not df_polar.empty:
-    baseline_window = df_polar.last("10min")
-    recent_data = df_polar.last("60s")
-
-    avg_hr_60s = recent_data["hr"].mean()
-    avg_hr_5min = df_polar.last("5min")["hr"].mean()
-    avg_hr_window = df_polar.last(f"{window_minutes}min")["hr"].mean()
-
-    avg_rmssd_60s = recent_data["hrv_rmssd"].mean()
-    avg_rmssd_5min = df_polar.last("5min")["hrv_rmssd"].mean()
-    avg_rmssd_window = df_polar.last(f"{window_minutes}min")["hrv_rmssd"].mean()
-
-    baseline_rmssd = baseline_window["hrv_rmssd"].mean() if not baseline_window.empty else None
-else:
-    avg_hr_60s = avg_hr_5min = avg_hr_window = None
-    avg_rmssd_60s = avg_rmssd_5min = avg_rmssd_window = baseline_rmssd = None
-
-
-# === Apple-like Layout für HR / HRV / Zustand ===
-st.markdown("""
-    <style>
         .metric-card {
             background: #ffffff;
             border-radius: 12px;
@@ -164,6 +102,66 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+
+# === Auto-Refresh ===
+st_autorefresh(interval=2000, key="datarefresh")
+
+# === Titel & Zeit ===
+st.title("📊 Biofeedback System – Polar H10 & CGM Live Dashboard")
+
+tz = pytz.timezone("Europe/Zurich")
+now = datetime.now(tz)
+st.markdown(f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>", unsafe_allow_html=True)
+st.info("📡 Echtzeitdaten aktiv – Anzeigezeitraum einstellbar im Seitenmenü")
+
+
+# === MongoDB Verbindung ===
+MONGO_URI = os.getenv("MONGO_URI") or "mongodb+srv://cocuzzam:MCETH2025@nightscout-db.21jfrwe.mongodb.net/?retryWrites=true&w=majority"
+client = MongoClient(MONGO_URI)
+db_polar = client["nightscout-db"]
+col_polar = db_polar["polar_data"]
+db_glucose = client["nightscout"]
+col_glucose = db_glucose["entries"]
+
+# === Seitenleiste ===
+st.sidebar.header("⚙️ Einstellungen")
+window_minutes = st.sidebar.slider("Zeitfenster (in Minuten)", 5, 60, 15)
+time_threshold = now - timedelta(minutes=window_minutes)
+
+# === Daten laden ===
+polar_data = list(col_polar.find({"timestamp": {"$gte": time_threshold.isoformat()}}).sort("timestamp", 1))
+df_polar = pd.DataFrame(polar_data)
+if not df_polar.empty:
+    df_polar["timestamp"] = pd.to_datetime(df_polar["timestamp"], errors="coerce")
+    df_polar = df_polar.set_index("timestamp").sort_index()
+
+glucose_data = list(col_glucose.find({"dateString": {"$gte": time_threshold.isoformat()}}).sort("dateString", 1))
+df_glucose = pd.DataFrame(glucose_data)
+if not df_glucose.empty:
+    df_glucose["timestamp"] = pd.to_datetime(df_glucose["dateString"], errors="coerce")
+    df_glucose = df_glucose.set_index("timestamp").sort_index()
+
+
+# === HR / HRV Berechnungen ===
+if not df_polar.empty:
+    baseline_window = df_polar.last("10min")
+    recent_data = df_polar.last("60s")
+
+    avg_hr_60s = recent_data["hr"].mean()
+    avg_hr_5min = df_polar.last("5min")["hr"].mean()
+    avg_hr_window = df_polar.last(f"{window_minutes}min")["hr"].mean()
+
+    avg_rmssd_60s = recent_data["hrv_rmssd"].mean()
+    avg_rmssd_5min = df_polar.last("5min")["hrv_rmssd"].mean()
+    avg_rmssd_window = df_polar.last(f"{window_minutes}min")["hrv_rmssd"].mean()
+
+    baseline_rmssd = baseline_window["hrv_rmssd"].mean() if not baseline_window.empty else None
+else:
+    avg_hr_60s = avg_hr_5min = avg_hr_window = None
+    avg_rmssd_60s = avg_rmssd_5min = avg_rmssd_window = baseline_rmssd = None
+
+
+# === APPLE-LIKE METRIC CARDS ===
 col1, col2 = st.columns(2)
 with col1:
     if avg_hr_60s:
@@ -197,7 +195,8 @@ with col2:
     else:
         st.markdown("<div class='no-data-box'>Keine HRV-Daten verfügbar.</div>", unsafe_allow_html=True)
 
-# === Zustand berechnen und darstellen ===
+
+# === Zustand + Empfehlung Cards ===
 if baseline_rmssd and avg_rmssd_60s:
     delta_rmssd = avg_rmssd_60s / baseline_rmssd
     if delta_rmssd < 0.7:
@@ -241,7 +240,8 @@ if baseline_rmssd and avg_rmssd_60s:
 else:
     st.markdown("<div class='no-data-box'>Warte auf ausreichende HRV-Daten zur Analyse …</div>", unsafe_allow_html=True)
 
-# === Gesamtsignal Übersicht ===
+
+# === GESAMTSIGNAL-ÜBERSICHT ===
 st.subheader(f"📈 Gesamtsignal-Übersicht – letzte {window_minutes} Minuten")
 if not df_polar.empty or not df_glucose.empty:
     fig = go.Figure()
@@ -265,5 +265,72 @@ if not df_polar.empty or not df_glucose.empty:
 else:
     st.markdown("<div class='no-data-box'>Keine Daten im aktuellen Zeitraum verfügbar.</div>", unsafe_allow_html=True)
 
-# === Einzelcharts etc. (unverändert) ===
-# [Deine weiteren Charts und Tabellen folgen hier...]
+
+# === EINZELCHARTS ===
+st.subheader(f"❤️ Herzfrequenz (HR) – letzte {window_minutes} Minuten")
+if not df_polar.empty and "hr" in df_polar.columns:
+    st.line_chart(df_polar[["hr"]])
+else:
+    st.markdown("<div class='no-data-box'>Keine Herzfrequenzdaten verfügbar.</div>", unsafe_allow_html=True)
+
+st.subheader(f"💓 HRV-Parameter (RMSSD & SDNN) – letzte {window_minutes} Minuten")
+if not df_polar.empty and all(col in df_polar.columns for col in ["hrv_rmssd", "hrv_sdnn"]):
+    st.line_chart(df_polar[["hrv_rmssd", "hrv_sdnn"]])
+else:
+    st.markdown("<div class='no-data-box'>Keine HRV-Daten verfügbar.</div>", unsafe_allow_html=True)
+
+st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
+if not df_glucose.empty and "sgv" in df_glucose.columns:
+    st.line_chart(df_glucose[["sgv"]])
+else:
+    st.markdown("<div class='no-data-box'>Keine CGM-Daten verfügbar.</div>", unsafe_allow_html=True)
+
+
+# === NEUROZUSTAND-VERLAUF ===
+st.subheader(f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten")
+if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
+    baseline_rmssd = df_polar["hrv_rmssd"].last("10min").mean()
+    def get_state_value(rmssd, baseline):
+        if not baseline or rmssd is None:
+            return None
+        ratio = rmssd / baseline
+        if ratio < 0.7: return 4
+        elif ratio < 1.0: return 3
+        elif ratio < 1.3: return 2
+        else: return 1
+
+    df_polar["state_value"] = df_polar["hrv_rmssd"].apply(lambda x: get_state_value(x, baseline_rmssd))
+    colors = {1:"#2ecc71",2:"#f1c40f",3:"#f39c12",4:"#e74c3c"}
+
+    fig_state = go.Figure()
+    for sv, color in colors.items():
+        sd = df_polar[df_polar["state_value"] == sv]
+        if not sd.empty:
+            fig_state.add_trace(go.Scatter(x=sd.index, y=sd["state_value"], mode="lines",
+                                           line=dict(width=0.5, color=color), fill="tozeroy", fillcolor=color,
+                                           name={1:"Flow",2:"Balanced",3:"Mild Stress",4:"High Stress"}[sv], opacity=0.7))
+    fig_state.update_layout(
+        yaxis=dict(tickvals=[1,2,3,4],
+                   ticktext=["Flow","Balanced","Mild Stress","High Stress"],
+                   range=[0.5,4.5],
+                   title="Zustand"),
+        xaxis_title="Zeit", showlegend=True,
+        template="plotly_white", height=400
+    )
+    st.plotly_chart(fig_state, use_container_width=True)
+else:
+    st.markdown("<div class='no-data-box'>Keine ausreichenden HRV-Daten zur Bestimmung des Zustandes.</div>", unsafe_allow_html=True)
+
+
+# === TABELLEN ===
+if not df_polar.empty:
+    st.subheader("🕒 Letzte Polar-Messwerte")
+    st.dataframe(df_polar.tail(10))
+else:
+    st.markdown("<div class='no-data-box'>Keine Polar-Messwerte verfügbar.</div>", unsafe_allow_html=True)
+
+if not df_glucose.empty:
+    st.subheader("🕒 Letzte CGM-Messwerte")
+    st.dataframe(df_glucose.tail(10))
+else:
+    st.markdown("<div class='no-data-box'>Keine CGM-Messwerte verfügbar.</div>", unsafe_allow_html=True)
