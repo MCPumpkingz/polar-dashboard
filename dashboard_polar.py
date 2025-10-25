@@ -135,65 +135,63 @@ with colB:
     else:
         st.markdown("<div class='no-data-box'>Keine HRV-Daten verfügbar.</div>", unsafe_allow_html=True)
 
-    # --- Zustand bestimmen ---
-    if baseline_rmssd and avg_rmssd_60s:
-        delta_rmssd = avg_rmssd_60s / baseline_rmssd
-        if delta_rmssd < 0.7:
-            state, color, desc, reco, level = (
-                "High Stress", "#e74c3c",
-                "Stark sympathische Aktivierung – **Fight or Flight**.",
-                "🌬️ 4-7-8-Atmung oder 6 Atemzüge/min zur Aktivierung des Vagusnervs.", 4)
-        elif delta_rmssd < 1.0:
-            state, color, desc, reco, level = (
-                "Mild Stress", "#f39c12",
-                "Leichte sympathische Aktivierung – du bist **fokussiert**, aber angespannt.",
-                "🫁 Längeres Ausatmen (4 s ein / 8 s aus).", 3)
-        elif delta_rmssd < 1.3:
-            state, color, desc, reco, level = (
-                "Balanced", "#f1c40f",
-                "Dein Nervensystem ist in **Balance**.",
-                "☯️ Box Breathing (4-4-4-4) zur Stabilisierung.", 2)
-        else:
-            state, color, desc, reco, level = (
-                "Recovery / Flow", "#2ecc71",
-                "Hohe parasympathische Aktivität – du bist im **Erholungsmodus**.",
-                "🧘 Meditation oder ruhige Atmung fördern Flow & Regeneration.", 1)
-
-        # --- Layout: Ampel + Textblöcke ---
-        st.markdown("### 🧠 Neurophysiologischer Zustand (aktuell)")
-        col1, col2, col3 = st.columns([2, 3, 3])
-        header = "font-size:18px;font-weight:600;text-align:center;color:#111;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;"
-
-        # Ampel
-        with col1:
-            st.markdown(f"<div style='{header}'>🧭 Status</div>", unsafe_allow_html=True)
-            colors = ["#2ecc71", "#f1c40f", "#f39c12", "#e74c3c"]
-            circles = []
-            for i, c in enumerate(colors, start=1):
-                active = (i == level)
-                circles.append(
-                    f"<div style='width:42px;height:42px;border-radius:50%;background-color:{c if active else '#e6e6e6'};"
-                    f"box-shadow:{'0 0 16px ' + c if active else 'inset 0 0 4px #ccc'};opacity:{'1' if active else '0.5'};'></div>"
-                )
-            lamp_html = "<div style='display:flex;justify-content:center;align-items:center;gap:16px;margin-top:12px;'>" + "".join(circles) + "</div>"
-            st.markdown(lamp_html, unsafe_allow_html=True)
-
-        # Zustand
-        with col2:
-            st.markdown(f"<div style='{header}'>🧠 Zustand</div>", unsafe_allow_html=True)
-            st.markdown(f"<div style='text-align:center;'><h3 style='color:{color};margin-bottom:6px;'>{state}</h3>"
-                        f"<p style='font-size:16px;color:#333;line-height:1.5;max-width:90%;margin:0 auto;'>{desc}</p></div>",
-                        unsafe_allow_html=True)
-
-        # Empfehlung
-        with col3:
-            st.markdown(f"<div style='{header}'>💡 Empfehlung</div>", unsafe_allow_html=True)
-            st.markdown(f"<div style='text-align:center;'><p style='font-size:15px;color:#444;line-height:1.5;max-width:90%;margin:0 auto;'>{reco}</p></div>",
-                        unsafe_allow_html=True)
+# --- Zustand bestimmen ---
+if baseline_rmssd and avg_rmssd_60s:
+    delta_rmssd = avg_rmssd_60s / baseline_rmssd
+    if delta_rmssd < 0.7:
+        state, color, desc, reco, level = (
+            "High Stress", "#e74c3c",
+            "Stark sympathische Aktivierung – **Fight or Flight**.",
+            "🌬️ 4-7-8-Atmung oder 6 Atemzüge/min zur Aktivierung des Vagusnervs.", 4)
+    elif delta_rmssd < 1.0:
+        state, color, desc, reco, level = (
+            "Mild Stress", "#f39c12",
+            "Leichte sympathische Aktivierung – du bist **fokussiert**, aber angespannt.",
+            "🫁 Längeres Ausatmen (4 s ein / 8 s aus).", 3)
+    elif delta_rmssd < 1.3:
+        state, color, desc, reco, level = (
+            "Balanced", "#f1c40f",
+            "Dein Nervensystem ist in **Balance**.",
+            "☯️ Box Breathing (4-4-4-4) zur Stabilisierung.", 2)
     else:
-        st.markdown("<div class='no-data-box'>Warte auf ausreichende HRV-Daten zur Analyse …</div>", unsafe_allow_html=True)
+        state, color, desc, reco, level = (
+            "Recovery / Flow", "#2ecc71",
+            "Hohe parasympathische Aktivität – du bist im **Erholungsmodus**.",
+            "🧘 Meditation oder ruhige Atmung fördern Flow & Regeneration.", 1)
+
+    # --- Layout: Ampel + Textblöcke ---
+    st.markdown("### 🧠 Neurophysiologischer Zustand (aktuell)")
+    col1, col2, col3 = st.columns([2, 3, 3])
+    header = "font-size:18px;font-weight:600;text-align:center;color:#111;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;"
+
+    # Ampel
+    with col1:
+        st.markdown(f"<div style='{header}'>🧭 Status</div>", unsafe_allow_html=True)
+        colors = ["#2ecc71", "#f1c40f", "#f39c12", "#e74c3c"]
+        circles = []
+        for i, c in enumerate(colors, start=1):
+            active = (i == level)
+            circles.append(
+                f"<div style='width:42px;height:42px;border-radius:50%;background-color:{c if active else '#e6e6e6'};"
+                f"box-shadow:{'0 0 16px ' + c if active else 'inset 0 0 4px #ccc'};opacity:{'1' if active else '0.5'};'></div>"
+            )
+        lamp_html = "<div style='display:flex;justify-content:center;align-items:center;gap:16px;margin-top:12px;'>" + "".join(circles) + "</div>"
+        st.markdown(lamp_html, unsafe_allow_html=True)
+
+    # Zustand
+    with col2:
+        st.markdown(f"<div style='{header}'>🧠 Zustand</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center;'><h3 style='color:{color};margin-bottom:6px;'>{state}</h3>"
+                    f"<p style='font-size:16px;color:#333;line-height:1.5;max-width:90%;margin:0 auto;'>{desc}</p></div>",
+                    unsafe_allow_html=True)
+
+    # Empfehlung
+    with col3:
+        st.markdown(f"<div style='{header}'>💡 Empfehlung</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center;'><p style='font-size:15px;color:#444;line-height:1.5;max-width:90%;margin:0 auto;'>{reco}</p></div>",
+                    unsafe_allow_html=True)
 else:
-    st.markdown("<div class='no-data-box'>Keine Polar-Daten im angegebenen Zeitraum gefunden.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='no-data-box'>Warte auf ausreichende HRV-Daten zur Analyse …</div>", unsafe_allow_html=True)
 
 
 # === Gesamtdiagramm Rohdaten ===
