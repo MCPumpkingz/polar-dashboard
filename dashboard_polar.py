@@ -220,11 +220,9 @@ else:
             4: "#e74c3c"   # High Stress
         }
 
-        # 👉 Titel außerhalb der Grafik anzeigen
         st.subheader(f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten")
 
         fig = go.Figure()
-
         for state_value, color in colors.items():
             state_df = df[df["state_value"] == state_value]
             if not state_df.empty:
@@ -254,6 +252,24 @@ else:
         )
 
         st.plotly_chart(fig, use_container_width=True)
+
+    # === 🩸 CGM Glukose Verlauf ===
+    st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
+
+    glucose_db = client["nightscout"]
+    glucose_collection = glucose_db["entries"]
+
+    glucose_data = list(glucose_collection.find({
+        "dateString": {"$gte": (now - timedelta(minutes=window_minutes)).isoformat()}
+    }).sort("dateString", 1))
+
+    if glucose_data:
+        df_glucose = pd.DataFrame(glucose_data)
+        df_glucose["timestamp"] = pd.to_datetime(df_glucose["dateString"], errors="coerce").dropna()
+        df_glucose = df_glucose.set_index("timestamp").sort_index()
+        st.line_chart(df_glucose[["sgv"]])
+    else:
+        st.warning("Keine CGM-Daten im angegebenen Zeitraum gefunden.")
 
     # === Letzte Werte ===
     st.subheader("🕒 Letzte Messwerte")
