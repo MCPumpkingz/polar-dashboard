@@ -167,7 +167,7 @@ else:
 
 
 # === Gesamtdiagramm Rohdaten ===
-st.subheader(f"📈 Gesamtsignal-Übersicht (Live)")
+st.subheader(f"📈 Gesamtsignal-Übersicht (Live) – letzte {window_minutes} Minuten"")
 if not df_polar.empty or not df_glucose.empty:
     fig = go.Figure()
     if "hr" in df_polar.columns:
