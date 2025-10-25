@@ -15,10 +15,11 @@ except ModuleNotFoundError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "plotly"])
     import plotly.graph_objects as go
 
-# === Seitenkonfiguration ===
-st.set_page_config(page_title="Biofeedback - Polar H10 Live Dashboard", layout="wide")
 
-# === Globales Styling (Helvetica, Clean, Weiß) ===
+# === Seitenkonfiguration ===
+st.set_page_config(page_title="Biofeedback - Polar H10 & CGM Dashboard", layout="wide")
+
+# === Styling ===
 st.markdown("""
     <style>
         html, body, [class*="st-"] {
@@ -26,251 +27,163 @@ st.markdown("""
             color: #111 !important;
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
-
         h1, h2, h3, h4, h5 {
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             color: #111;
             font-weight: 600;
         }
-
-        .stApp {
-            background-color: white !important;
-        }
-
         div.block-container {
-            padding-top: 1rem;
-            padding-bottom: 1rem;
-            padding-left: 2rem;
-            padding-right: 2rem;
+            padding: 1rem 2rem;
         }
-
         .stAlert {
             background-color: #f6f8fa !important;
             border-radius: 10px !important;
-            color: #222 !important;
         }
     </style>
 """, unsafe_allow_html=True)
 
+
 # === Auto-Refresh ===
-st_autorefresh(interval=1000, key="datarefresh")
+st_autorefresh(interval=2000, key="datarefresh")
 
 # === Titel ===
-st.title("📊 Biofeedback System - Polar H10 Live Dashboard")
+st.title("📊 Biofeedback System – Polar H10 & CGM Live Dashboard")
 
-# === Aktuelle Zeit (CET) ===
+# === Aktuelle Zeit ===
 tz = pytz.timezone("Europe/Zurich")
 now = datetime.now(tz)
-st.markdown(
-    f"<div style='text-align:right; color:#777; font-size:14px;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>",
-    unsafe_allow_html=True
-)
+st.markdown(f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>", unsafe_allow_html=True)
 
-# === Infozeile ===
-st.info("📡 Echtzeitdaten aktiv – Anzeigezeitraum einstellbar im Seitenmenü")
-
-# === MongoDB Verbindung ===
-MONGO_URI = os.getenv("MONGO_URI") or "mongodb+srv://cocuzzam:MCETH2025@nightscout-db.21jfrwe.mongodb.net/nightscout-db?retryWrites=true&w=majority"
+# === Verbindung ===
+MONGO_URI = os.getenv("MONGO_URI") or "mongodb+srv://cocuzzam:MCETH2025@nightscout-db.21jfrwe.mongodb.net/?retryWrites=true&w=majority"
 client = MongoClient(MONGO_URI)
-db = client["nightscout-db"]
-collection = db["polar_data"]
+db_polar = client["nightscout-db"]
+col_polar = db_polar["polar_data"]
+db_glucose = client["nightscout"]
+col_glucose = db_glucose["entries"]
 
 # === Seitenleiste ===
 st.sidebar.header("⚙️ Einstellungen")
 window_minutes = st.sidebar.slider("Zeitfenster (in Minuten)", 5, 60, 15)
-
-# === Daten abrufen ===
 time_threshold = now - timedelta(minutes=window_minutes)
-data = list(collection.find({"timestamp": {"$gte": time_threshold.isoformat()}}).sort("timestamp", 1))
 
-if not data:
-    st.warning(f"Keine Polar-Daten in den letzten {window_minutes} Minuten gefunden.")
+# === POLAR Daten ===
+polar_data = list(col_polar.find({"timestamp": {"$gte": time_threshold.isoformat()}}).sort("timestamp", 1))
+df_polar = pd.DataFrame(polar_data)
+if not df_polar.empty:
+    df_polar["timestamp"] = pd.to_datetime(df_polar["timestamp"], errors="coerce")
+    df_polar = df_polar.set_index("timestamp").sort_index()
 else:
-    df = pd.DataFrame(data)
-    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce").dropna()
-    if df["timestamp"].dt.tz is None:
-        df["timestamp"] = df["timestamp"].dt.tz_localize("UTC")
-    df["timestamp"] = df["timestamp"].dt.tz_convert("Europe/Zurich")
-    df = df.set_index("timestamp").sort_index()
+    df_polar = pd.DataFrame()
 
-    # === Fenster definieren ===
-    baseline_window = df.last("10min")
-    recent_data = df.last("60s")
+# === CGM Daten ===
+glucose_data = list(col_glucose.find({"dateString": {"$gte": time_threshold.isoformat()}}).sort("dateString", 1))
+df_glucose = pd.DataFrame(glucose_data)
+if not df_glucose.empty:
+    df_glucose["timestamp"] = pd.to_datetime(df_glucose["dateString"], errors="coerce")
+    df_glucose = df_glucose.set_index("timestamp").sort_index()
+else:
+    df_glucose = pd.DataFrame()
 
-    avg_hr = recent_data["hr"].mean() if not recent_data.empty else None
-    avg_rmssd = recent_data["hrv_rmssd"].mean() if not recent_data.empty else None
-    baseline_rmssd = baseline_window["hrv_rmssd"].mean() if not baseline_window.empty else None
+# === Kombinierte Rohdaten-Chart ===
+st.subheader(f"📈 Rohdaten-Übersicht – letzte {window_minutes} Minuten")
 
-    # === Metriken ===
-    colA, colB = st.columns(2)
-    with colA:
-        if avg_hr:
-            st.metric("❤️ Durchschnittliche Herzfrequenz (60s)", f"{avg_hr:.1f} bpm")
-    with colB:
-        if avg_rmssd:
-            st.metric("💓 Durchschnittlicher RMSSD (60s)", f"{avg_rmssd:.4f}")
+if not df_polar.empty or not df_glucose.empty:
+    fig = go.Figure()
 
-    # === 🧠 Neurophysiologischer Zustand ===
-    st.markdown("### 🧠 Neurophysiologischer Zustand")
+    # HR
+    if "hr" in df_polar.columns:
+        fig.add_trace(go.Scatter(
+            x=df_polar.index, y=df_polar["hr"], name="Herzfrequenz (bpm)",
+            line=dict(color="#e74c3c", width=2)
+        ))
 
-    if baseline_rmssd and avg_rmssd:
-        delta_rmssd = avg_rmssd / baseline_rmssd
+    # HRV RMSSD
+    if "hrv_rmssd" in df_polar.columns:
+        fig.add_trace(go.Scatter(
+            x=df_polar.index, y=df_polar["hrv_rmssd"]*1000,  # ggf. skalieren für bessere Lesbarkeit
+            name="HRV RMSSD (ms)", line=dict(color="#2980b9", width=2, dash="dot"), yaxis="y2"
+        ))
 
-        if delta_rmssd < 0.7:
-            state, color, description, recommendation, level = (
-                "High Stress", "#e74c3c",
-                "Dein Nervensystem ist stark sympathisch aktiviert – **Fight-or-Flight-Modus**.",
-                "🌬️ 4-7-8-Atmung oder 6 Atemzüge/Minute zur Aktivierung des Vagusnervs.",
-                4
-            )
-        elif delta_rmssd < 1.0:
-            state, color, description, recommendation, level = (
-                "Mild Stress", "#f39c12",
-                "Leichte sympathische Aktivierung – du bist **fokussiert**, aber angespannt.",
-                "🫁 Längeres Ausatmen (4 Sek. ein, 8 Sek. aus).",
-                3
-            )
-        elif delta_rmssd < 1.3:
-            state, color, description, recommendation, level = (
-                "Balanced", "#f1c40f",
-                "Dein Nervensystem ist in **Balance** – gute Regulation zwischen Aktivierung und Ruhe.",
-                "☯️ Box Breathing (4-4-4-4) zur Stabilisierung.",
-                2
-            )
-        else:
-            state, color, description, recommendation, level = (
-                "Recovery / Flow", "#2ecc71",
-                "Hohe parasympathische Aktivität – dein Körper ist im **Erholungsmodus**.",
-                "🧘 Meditation oder ruhige Atmung fördern Flow & Regeneration.",
-                1
-            )
+    # Glukose
+    if "sgv" in df_glucose.columns:
+        fig.add_trace(go.Scatter(
+            x=df_glucose.index, y=df_glucose["sgv"], name="Glukose (mg/dL)",
+            line=dict(color="#27ae60", width=2, dash="solid"), yaxis="y3"
+        ))
 
-        # === Layout: Ampel (horizontal) | Zustand | Empfehlung ===
-        col1, col2, col3 = st.columns([2, 3, 3])
-        header_style = "font-size:18px; font-weight:600; text-align:center; color:#111; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif;"
+    fig.update_layout(
+        template="plotly_white",
+        height=500,
+        xaxis=dict(title="Zeit"),
+        yaxis=dict(title="HR (bpm)", side="left"),
+        yaxis2=dict(title="HRV RMSSD (ms)", overlaying="y", side="right", position=0.9, showgrid=False),
+        yaxis3=dict(title="Glukose (mg/dL)", overlaying="y", side="right", position=1.0, showgrid=False),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5),
+        margin=dict(l=60, r=60, t=10, b=40)
+    )
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.warning("Keine Daten zum Anzeigen gefunden.")
 
-        # === Spalte 1: Ampel horizontal ===
-        with col1:
-            st.markdown(f"<div style='{header_style}'>🧭 Status</div>", unsafe_allow_html=True)
-            colors = ["#2ecc71", "#f1c40f", "#f39c12", "#e74c3c"]
-            circles = []
-            for i, c in enumerate(colors, start=1):
-                active = (i == level)
-                circles.append(
-                    f"<div style='width:42px; height:42px; border-radius:50%; background-color:{c if active else '#e6e6e6'}; "
-                    f"box-shadow:{'0 0 16px ' + c if active else 'inset 0 0 4px #ccc'}; opacity:{'1' if active else '0.5'};'></div>"
-                )
-            lamp_html = "<div style='display:flex; justify-content:center; align-items:center; gap:16px; margin-top:12px;'>" + "".join(circles) + "</div>"
-            st.markdown(lamp_html, unsafe_allow_html=True)
+# === Einzel-Visualisierungen ===
 
-        # === Spalte 2: Zustand ===
-        with col2:
-            st.markdown(f"<div style='{header_style}'>🧠 Zustand</div>", unsafe_allow_html=True)
-            st.markdown(f"""
-                <div style='text-align:center;'>
-                    <h3 style='color:{color}; margin-bottom:6px;'>{state}</h3>
-                    <p style='font-size:16px; color:#333; line-height:1.5; max-width:90%; margin:0 auto;'>
-                        {description}
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
-
-        # === Spalte 3: Empfehlung ===
-        with col3:
-            st.markdown(f"<div style='{header_style}'>💡 Empfehlung</div>", unsafe_allow_html=True)
-            st.markdown(f"""
-                <div style='text-align:center;'>
-                    <p style='font-size:15px; color:#444; line-height:1.5; max-width:90%; margin:0 auto;'>
-                        {recommendation}
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
-
-    else:
-        st.info("Warte auf ausreichende HRV-Daten zur neurophysiologischen Analyse …")
-
-    # === Diagramme ===
+if not df_polar.empty:
     st.subheader(f"❤️ Herzfrequenz (HR) – letzte {window_minutes} Minuten")
-    st.line_chart(df[["hr"]])
+    st.line_chart(df_polar[["hr"]])
 
     st.subheader(f"💓 HRV Parameter (RMSSD & SDNN) – letzte {window_minutes} Minuten")
-    st.line_chart(df[["hrv_rmssd", "hrv_sdnn"]])
+    st.line_chart(df_polar[["hrv_rmssd", "hrv_sdnn"]])
+else:
+    st.warning("Keine Polar-Daten im angegebenen Zeitraum gefunden.")
 
-    # === 🧭 Farbige State Timeline (Plotly, Titel außerhalb) ===
-    if not df.empty and "hrv_rmssd" in df.columns:
-        def get_state_value(rmssd, baseline):
-            if not baseline or rmssd is None:
-                return None
-            ratio = rmssd / baseline
-            if ratio < 0.7:
-                return 4
-            elif ratio < 1.0:
-                return 3
-            elif ratio < 1.3:
-                return 2
-            else:
-                return 1
-
-        df["state_value"] = df["hrv_rmssd"].apply(lambda x: get_state_value(x, baseline_rmssd))
-
-        colors = {
-            1: "#2ecc71",  # Flow
-            2: "#f1c40f",  # Balanced
-            3: "#f39c12",  # Mild Stress
-            4: "#e74c3c"   # High Stress
-        }
-
-        st.subheader(f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten")
-
-        fig = go.Figure()
-        for state_value, color in colors.items():
-            state_df = df[df["state_value"] == state_value]
-            if not state_df.empty:
-                fig.add_trace(go.Scatter(
-                    x=state_df.index,
-                    y=state_df["state_value"],
-                    mode="lines",
-                    line=dict(width=0.5, color=color),
-                    fill="tozeroy",
-                    fillcolor=color,
-                    name={1: "Recovery / Flow", 2: "Balanced", 3: "Mild Stress", 4: "High Stress"}[state_value],
-                    opacity=0.7
-                ))
-
-        fig.update_layout(
-            yaxis=dict(
-                tickvals=[1, 2, 3, 4],
-                ticktext=["Flow", "Balanced", "Mild Stress", "High Stress"],
-                range=[0.5, 4.5],
-                title="Zustand"
-            ),
-            xaxis_title="Zeit",
-            showlegend=True,
-            template="plotly_white",
-            height=400,
-            margin=dict(l=40, r=40, t=10, b=40)
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-    # === 🩸 CGM Glukose Verlauf ===
+if not df_glucose.empty:
     st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
+    st.line_chart(df_glucose[["sgv"]])
+else:
+    st.warning("Keine CGM-Daten im angegebenen Zeitraum gefunden.")
 
-    glucose_db = client["nightscout"]
-    glucose_collection = glucose_db["entries"]
+# === Neurophysiologischer Zustand (Plotly Verlauf) ===
+if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
+    baseline_rmssd = df_polar["hrv_rmssd"].last("10min").mean()
+    def get_state_value(rmssd, baseline):
+        if not baseline or rmssd is None:
+            return None
+        ratio = rmssd / baseline
+        if ratio < 0.7:
+            return 4
+        elif ratio < 1.0:
+            return 3
+        elif ratio < 1.3:
+            return 2
+        else:
+            return 1
+    df_polar["state_value"] = df_polar["hrv_rmssd"].apply(lambda x: get_state_value(x, baseline_rmssd))
+    colors = {1:"#2ecc71",2:"#f1c40f",3:"#f39c12",4:"#e74c3c"}
 
-    glucose_data = list(glucose_collection.find({
-        "dateString": {"$gte": (now - timedelta(minutes=window_minutes)).isoformat()}
-    }).sort("dateString", 1))
+    st.subheader(f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten")
 
-    if glucose_data:
-        df_glucose = pd.DataFrame(glucose_data)
-        df_glucose["timestamp"] = pd.to_datetime(df_glucose["dateString"], errors="coerce").dropna()
-        df_glucose = df_glucose.set_index("timestamp").sort_index()
-        st.line_chart(df_glucose[["sgv"]])
-    else:
-        st.warning("Keine CGM-Daten im angegebenen Zeitraum gefunden.")
+    fig_state = go.Figure()
+    for state_value, color in colors.items():
+        state_df = df_polar[df_polar["state_value"] == state_value]
+        if not state_df.empty:
+            fig_state.add_trace(go.Scatter(
+                x=state_df.index, y=state_df["state_value"], mode="lines",
+                line=dict(width=0.5, color=color), fill="tozeroy",
+                fillcolor=color, name={1:"Flow",2:"Balanced",3:"Mild Stress",4:"High Stress"}[state_value],
+                opacity=0.7
+            ))
+    fig_state.update_layout(
+        yaxis=dict(tickvals=[1,2,3,4],ticktext=["Flow","Balanced","Mild Stress","High Stress"],range=[0.5,4.5],title="Zustand"),
+        xaxis_title="Zeit",
+        showlegend=True, template="plotly_white", height=400,
+        margin=dict(l=40, r=40, t=10, b=40)
+    )
+    st.plotly_chart(fig_state, use_container_width=True)
 
-    # === Letzte Werte ===
-    st.subheader("🕒 Letzte Messwerte")
-    st.dataframe(df.tail(10))
+# === Letzte Werte ===
+if not df_polar.empty:
+    st.subheader("🕒 Letzte Polar-Messwerte")
+    st.dataframe(df_polar.tail(10))
+if not df_glucose.empty:
+    st.subheader("🕒 Letzte CGM-Messwerte")
+    st.dataframe(df_glucose.tail(10))
