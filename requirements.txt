@@ -1,6 +1,6 @@
-streamlit
-pymongo
-pandas
-streamlit-autorefresh
+streamlit>=1.39
+pandas>=2.0
+pymongo[srv]>=4.7
+plotly>=5.22
 pytz
 streamlit-autorefresh
