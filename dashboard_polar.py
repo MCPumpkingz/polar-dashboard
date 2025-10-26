@@ -318,7 +318,7 @@ def main() -> None:
     # Title and last update time
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
-    st.title(" Biofeedback System – Dashbaord)
+    st.title("Biofeedback Dashboard – Polar & CGM")
     st.markdown(
         f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>",
         unsafe_allow_html=True,
