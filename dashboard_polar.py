@@ -318,7 +318,7 @@ def main() -> None:
     # Title and last update time
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
-    st.title("📊 Biofeedback System – Polar H10 & CGM Live Dashboard")
+    st.title(" Biofeedback System – Dashbaord)
     st.markdown(
         f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>",
         unsafe_allow_html=True,
@@ -333,9 +333,6 @@ def main() -> None:
     # Auto refresh every 2 seconds if st_autorefresh is available
     if st_autorefresh:
         st_autorefresh(interval=2000, key="datarefresh")
-
-    # Informational message
-    st.info("📡 Echtzeitdaten aktiv – Anzeigezeitraum einstellbar im Seitenmenü")
 
     # Load data
     df_polar, df_glucose = connect_to_mongo()
