@@ -228,6 +228,7 @@ def main():
         </style>
     """, unsafe_allow_html=True)
 
+    # Zahlen vorbereiten
     hr = metrics.get("avg_hr_60s")
     delta_hr = metrics.get("delta_hr")
     hrv = metrics.get("avg_rmssd_60s")
@@ -246,8 +247,9 @@ def main():
     delta_hrv_display = format_delta(delta_hrv, "ms")
     gl_display = f"{gl:.0f}" if gl else "–"
 
-    st.markdown(f"""
+    cards_html = f"""
     <div class="metric-container">
+
         <div class="metric-card" style="background: linear-gradient(135deg, #e96443, #904e95);">
             <div class="metric-icon">❤️</div>
             <div class="metric-title">HERZFREQUENZ</div>
@@ -274,8 +276,10 @@ def main():
             <div class="metric-interpret">Blutzucker im Normbereich</div>
             <div class="metric-live">🟢 Live</div>
         </div>
+
     </div>
-    """, unsafe_allow_html=True)
+    """
+    st.markdown(cards_html, unsafe_allow_html=True)
 
     # === KOMBINIERTER PLOT ===
     st.subheader(f"📈 Gesamtsignal – letzte {window_minutes} Minuten")
