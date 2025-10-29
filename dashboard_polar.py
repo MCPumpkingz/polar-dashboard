@@ -152,12 +152,12 @@ def main():
     st.session_state["window_minutes"] = window_minutes
 
     if st_autorefresh:
-        st_autorefresh(interval=2000, key="datarefresh")
+        st_autorefresh(interval=3000, key="datarefresh")
 
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
-    # === NEUE GRAFISCHE LIVE-KARTEN ===
+    # === STYLE ===
     st.markdown("""
         <style>
         .metric-container { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 25px; }
@@ -172,13 +172,21 @@ def main():
         </style>
     """, unsafe_allow_html=True)
 
+    # === LIVE-KARTEN ===
+    hr = metrics.get("avg_hr_60s", 0)
+    delta_hr = metrics.get("delta_hr", 0)
+    hrv = metrics.get("avg_rmssd_60s", 0)
+    delta_hrv = metrics.get("delta_rmssd", 0)
+    gl = metrics.get("latest_glucose", 0)
+
     cards_html = f"""
     <div class="metric-container">
+
         <div class="metric-card" style="background: linear-gradient(135deg, #e96443, #904e95);">
             <div class="metric-icon">❤️</div>
             <div class="metric-title">HERZFREQUENZ</div>
-            <div class="metric-value">{metrics.get("avg_hr_60s", 0):.0f}<span class="metric-unit"> bpm</span></div>
-            <div class="metric-delta">{'↗' if metrics.get("delta_hr", 0) > 0 else '↘' if metrics.get("delta_hr", 0) < 0 else '→'} {metrics.get("delta_hr", 0):+.1f} bpm</div>
+            <div class="metric-value">{hr:.0f}<span class="metric-unit"> bpm</span></div>
+            <div class="metric-delta">{'↗' if delta_hr > 0 else '↘' if delta_hr < 0 else '→'} {delta_hr:+.1f} bpm</div>
             <div class="metric-interpret">Herzaktivität aktuell</div>
             <div class="metric-live">🟢 Live</div>
         </div>
@@ -186,8 +194,8 @@ def main():
         <div class="metric-card" style="background: linear-gradient(135deg, #2980b9, #6dd5fa);">
             <div class="metric-icon">💓</div>
             <div class="metric-title">HRV (RMSSD)</div>
-            <div class="metric-value">{metrics.get("avg_rmssd_60s", 0)*1000:.0f}<span class="metric-unit"> ms</span></div>
-            <div class="metric-delta">{'↗' if metrics.get("delta_rmssd", 0) > 0 else '↘' if metrics.get("delta_rmssd", 0) < 0 else '→'} {metrics.get("delta_rmssd", 0):+.1f} ms</div>
+            <div class="metric-value">{hrv*1000:.0f}<span class="metric-unit"> ms</span></div>
+            <div class="metric-delta">{'↗' if delta_hrv > 0 else '↘' if delta_hrv < 0 else '→'} {delta_hrv:+.1f} ms</div>
             <div class="metric-interpret">Vagal-Tonus / Stresslevel</div>
             <div class="metric-live">🟢 Live</div>
         </div>
@@ -195,17 +203,18 @@ def main():
         <div class="metric-card" style="background: linear-gradient(135deg, #00b09b, #96c93d);">
             <div class="metric-icon">🩸</div>
             <div class="metric-title">GLUKOSE</div>
-            <div class="metric-value">{metrics.get("latest_glucose", 0):.0f}<span class="metric-unit"> mg/dL</span></div>
+            <div class="metric-value">{gl:.0f}<span class="metric-unit"> mg/dL</span></div>
             <div class="metric-delta">↗ leicht steigend</div>
             <div class="metric-interpret">Blutzucker im Normbereich</div>
             <div class="metric-live">🟢 Live</div>
         </div>
+
     </div>
     """
 
     st.markdown(cards_html, unsafe_allow_html=True)
 
-    # === KOMBINIERTER PLOT ===
+    # === GESAMTPLOT ===
     st.subheader(f"📈 Gesamtsignal – letzte {window_minutes} Minuten")
     if not df_polar.empty or not df_glucose.empty:
         st.plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
@@ -216,24 +225,35 @@ def main():
     st.subheader(f"❤️ Herzfrequenz – letzte {window_minutes} Minuten")
     if not df_polar.empty:
         fig_hr = go.Figure()
-        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], mode="lines", line=dict(color="#e74c3c", width=2)))
+        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], mode="lines",
+                                    line=dict(color="#e74c3c", width=2)))
         fig_hr.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
         st.plotly_chart(fig_hr, use_container_width=True)
 
-    st.subheader(f"💓 HRV-Parameter – letzte {window_minutes} Minuten")
+    st.subheader(f"💓 HRV (RMSSD & SDNN) – letzte {window_minutes} Minuten")
     if not df_polar.empty:
         fig_hrv = go.Figure()
         if "hrv_rmssd" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000, mode="lines", line=dict(color="#2980b9", width=2)))
+            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000,
+                                         mode="lines", line=dict(color="#2980b9", width=2)))
         if "hrv_sdnn" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"]*1000, mode="lines", line=dict(color="#5dade2", width=2)))
+            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"]*1000,
+                                         mode="lines", line=dict(color="#5dade2", width=2)))
+        fig_hrv.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
         st.plotly_chart(fig_hrv, use_container_width=True)
 
     st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
     if not df_glucose.empty:
-        fig_glucose = go.Figure()
-        fig_glucose.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"], mode="lines", line=dict(color="#27ae60", width=2)))
-        st.plotly_chart(fig_glucose, use_container_width=True)
+        fig_gl = go.Figure()
+        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1,
+                         yref="y", y0=70, y1=140,
+                         fillcolor="rgba(46,204,113,0.2)", line=dict(width=0), layer="below")
+        fig_gl.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"],
+                                    mode="lines+markers",
+                                    line=dict(color="#27ae60", width=2),
+                                    marker=dict(size=4)))
+        fig_gl.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
+        st.plotly_chart(fig_gl, use_container_width=True)
 
     # === TABELLEN ===
     if not df_polar.empty:
