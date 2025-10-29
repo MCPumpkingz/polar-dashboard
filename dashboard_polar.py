@@ -76,7 +76,7 @@ def compute_metrics(df_polar: pd.DataFrame, df_glucose: pd.DataFrame, window_min
         if avg_hr_long and avg_hr_60s:
             delta_hr = avg_hr_60s - avg_hr_long
 
-        # HRV RMSSD means (in seconds, convert to ms when displayed)
+        # HRV RMSSD means (in seconds, convert to ms)
         avg_rmssd_60s = recent_data["hrv_rmssd"].mean()
         avg_rmssd_long = long_window["hrv_rmssd"].mean()
         delta_rmssd = None
@@ -120,6 +120,7 @@ def create_combined_plot(df_polar: pd.DataFrame, df_glucose: pd.DataFrame) -> go
     if not df_glucose.empty and "sgv" in df_glucose.columns:
         fig.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"], name="Glukose (mg/dL)", mode="lines", yaxis="y3"))
 
+    # Updated layout: Glucose axis fixed between 40–180 mg/dL
     fig.update_layout(
         template="plotly_white",
         height=450,
@@ -127,7 +128,14 @@ def create_combined_plot(df_polar: pd.DataFrame, df_glucose: pd.DataFrame) -> go
         xaxis=dict(title="Zeit"),
         yaxis=dict(title="HR (bpm)"),
         yaxis2=dict(title="HRV (ms)", overlaying="y", side="right", position=0.9, showgrid=False),
-        yaxis3=dict(title="Glukose (mg/dL)", overlaying="y", side="right", position=1.0, showgrid=False),
+        yaxis3=dict(
+            title="Glukose (mg/dL)",
+            overlaying="y",
+            side="right",
+            position=1.0,
+            showgrid=False,
+            range=[40, 180],  # ✅ fixed range
+        ),
         legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
     )
     return fig
@@ -205,7 +213,9 @@ def main() -> None:
 
     st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
     if not df_glucose.empty and "sgv" in df_glucose.columns:
-        st.container(border=True, height="stretch").line_chart(df_glucose[["sgv"]])
+        with st.container(border=True, height="stretch"):
+            st.line_chart(df_glucose[["sgv"]], height=300)
+            st.markdown("<small>Y-Achse fixiert auf 40–180 mg/dL</small>", unsafe_allow_html=True)
     else:
         st.info("Keine CGM-Daten verfügbar.")
 
