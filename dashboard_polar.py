@@ -167,119 +167,99 @@ def main():
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
-    # === NEUE GRAFISCHE LIVE-KARTEN ===
-    st.markdown("""
-        <style>
-        .metric-container {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-            margin-bottom: 25px;
-        }
-        .metric-card {
-            flex: 1;
-            border-radius: 20px;
-            padding: 24px 28px;
-            color: white;
-            position: relative;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-            background: linear-gradient(135deg, #6A11CB, #2575FC);
-        }
-        .metric-title {
-            font-size: 16px;
-            letter-spacing: 0.5px;
-            opacity: 0.9;
-            margin-bottom: 8px;
-        }
-        .metric-value {
-            font-size: 48px;
-            font-weight: 700;
-            margin: 0;
-        }
-        .metric-unit {
-            font-size: 18px;
-            margin-left: 4px;
-            opacity: 0.85;
-        }
-        .metric-delta {
-            font-size: 16px;
-            margin-top: 6px;
-            opacity: 0.8;
-        }
-        .metric-interpret {
-            font-size: 14px;
-            opacity: 0.75;
-            margin-top: 8px;
-        }
-        .metric-icon {
-            position: absolute;
-            top: 18px;
-            right: 22px;
-            font-size: 28px;
-            opacity: 0.9;
-        }
-        .metric-live {
-            position: absolute;
-            bottom: 12px;
-            left: 24px;
-            font-size: 14px;
-            color: #9eff9e;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+# === NEUE GRAFISCHE LIVE-KARTEN ===
+st.markdown("""
+    <style>
+    .metric-container {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 25px;
+    }
+    .metric-card {
+        flex: 1;
+        border-radius: 20px;
+        padding: 24px 28px;
+        color: white;
+        position: relative;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    .metric-title {
+        font-size: 16px;
+        letter-spacing: 0.5px;
+        opacity: 0.9;
+        margin-bottom: 8px;
+    }
+    .metric-value {
+        font-size: 48px;
+        font-weight: 700;
+        margin: 0;
+    }
+    .metric-unit {
+        font-size: 18px;
+        margin-left: 4px;
+        opacity: 0.85;
+    }
+    .metric-delta {
+        font-size: 16px;
+        margin-top: 6px;
+        opacity: 0.8;
+    }
+    .metric-interpret {
+        font-size: 14px;
+        opacity: 0.75;
+        margin-top: 8px;
+    }
+    .metric-icon {
+        position: absolute;
+        top: 18px;
+        right: 22px;
+        font-size: 28px;
+        opacity: 0.9;
+    }
+    .metric-live {
+        position: absolute;
+        bottom: 12px;
+        left: 24px;
+        font-size: 14px;
+        color: #9eff9e;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-    # Zahlen vorbereiten
-    hr = metrics.get("avg_hr_60s")
-    delta_hr = metrics.get("delta_hr")
-    hrv = metrics.get("avg_rmssd_60s")
-    delta_hrv = metrics.get("delta_rmssd")
-    gl = metrics.get("latest_glucose")
+cards_html = f"""
+<div class="metric-container">
 
-    def format_delta(value, unit):
-        if value is None:
-            return ""
-        arrow = "↗" if value > 0 else ("↘" if value < 0 else "→")
-        return f"{arrow} {value:+.1f} {unit}"
-
-    hr_display = f"{hr:.0f}" if hr else "–"
-    delta_hr_display = format_delta(delta_hr, "bpm")
-    hrv_display = f"{(hrv * 1000):.0f}" if hrv else "–"
-    delta_hrv_display = format_delta(delta_hrv, "ms")
-    gl_display = f"{gl:.0f}" if gl else "–"
-
-    cards_html = f"""
-    <div class="metric-container">
-
-        <div class="metric-card" style="background: linear-gradient(135deg, #e96443, #904e95);">
-            <div class="metric-icon">❤️</div>
-            <div class="metric-title">HERZFREQUENZ</div>
-            <div class="metric-value">{hr_display}<span class="metric-unit"> bpm</span></div>
-            <div class="metric-delta">{delta_hr_display}</div>
-            <div class="metric-interpret">Herzaktivität aktuell</div>
-            <div class="metric-live">🟢 Live</div>
-        </div>
-
-        <div class="metric-card" style="background: linear-gradient(135deg, #2980b9, #6dd5fa);">
-            <div class="metric-icon">💓</div>
-            <div class="metric-title">HRV (RMSSD)</div>
-            <div class="metric-value">{hrv_display}<span class="metric-unit"> ms</span></div>
-            <div class="metric-delta">{delta_hrv_display}</div>
-            <div class="metric-interpret">Vagal-Tonus / Stresslevel</div>
-            <div class="metric-live">🟢 Live</div>
-        </div>
-
-        <div class="metric-card" style="background: linear-gradient(135deg, #00b09b, #96c93d);">
-            <div class="metric-icon">🩸</div>
-            <div class="metric-title">GLUKOSE</div>
-            <div class="metric-value">{gl_display}<span class="metric-unit"> mg/dL</span></div>
-            <div class="metric-delta">↗ leicht steigend</div>
-            <div class="metric-interpret">Blutzucker im Normbereich</div>
-            <div class="metric-live">🟢 Live</div>
-        </div>
-
+    <div class="metric-card" style="background: linear-gradient(135deg, #e96443, #904e95);">
+        <div class="metric-icon">❤️</div>
+        <div class="metric-title">HERZFREQUENZ</div>
+        <div class="metric-value">{metrics.get("avg_hr_60s", 0):.0f}<span class="metric-unit"> bpm</span></div>
+        <div class="metric-delta">{'↗' if metrics.get("delta_hr", 0) > 0 else '↘' if metrics.get("delta_hr", 0) < 0 else '→'} {metrics.get("delta_hr", 0):+.1f} bpm</div>
+        <div class="metric-interpret">Herzaktivität aktuell</div>
+        <div class="metric-live">🟢 Live</div>
     </div>
-    """
-    st.markdown(cards_html, unsafe_allow_html=True)
+
+    <div class="metric-card" style="background: linear-gradient(135deg, #2980b9, #6dd5fa);">
+        <div class="metric-icon">💓</div>
+        <div class="metric-title">HRV (RMSSD)</div>
+        <div class="metric-value">{metrics.get("avg_rmssd_60s", 0) * 1000:.0f}<span class="metric-unit"> ms</span></div>
+        <div class="metric-delta">{'↗' if metrics.get("delta_rmssd", 0) > 0 else '↘' if metrics.get("delta_rmssd", 0) < 0 else '→'} {metrics.get("delta_rmssd", 0):+.1f} ms</div>
+        <div class="metric-interpret">Vagal-Tonus / Stresslevel</div>
+        <div class="metric-live">🟢 Live</div>
+    </div>
+
+    <div class="metric-card" style="background: linear-gradient(135deg, #00b09b, #96c93d);">
+        <div class="metric-icon">🩸</div>
+        <div class="metric-title">GLUKOSE</div>
+        <div class="metric-value">{metrics.get("latest_glucose", 0):.0f}<span class="metric-unit"> mg/dL</span></div>
+        <div class="metric-delta">↗ leicht steigend</div>
+        <div class="metric-interpret">Blutzucker im Normbereich</div>
+        <div class="metric-live">🟢 Live</div>
+    </div>
+
+</div>
+"""
+st.markdown(cards_html, unsafe_allow_html=True)
 
     # === KOMBINIERTER PLOT ===
     st.subheader(f"📈 Gesamtsignal – letzte {window_minutes} Minuten")
