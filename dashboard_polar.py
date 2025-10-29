@@ -21,6 +21,7 @@ except ModuleNotFoundError:
     st_autorefresh = None
 
 
+# === Datenbank-Verbindung ===
 def connect_to_mongo():
     """Stellt Verbindung zu MongoDB her und gibt Polar- & Glukose-Datenframes zurück."""
     MONGO_URI = os.getenv("MONGO_URI") or \
@@ -57,6 +58,7 @@ def connect_to_mongo():
     return df_polar, df_glucose
 
 
+# === Kennzahlenberechnung ===
 def compute_metrics(df_polar, df_glucose, window_minutes):
     """Berechnet Durchschnittswerte & Deltas."""
     metrics = {}
@@ -84,6 +86,7 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
     return metrics
 
 
+# === Kombinierter Plot ===
 def create_combined_plot(df_polar, df_glucose):
     """Erstellt kombinierten Plot für HR, HRV & Glukose."""
     fig = go.Figure()
@@ -104,14 +107,14 @@ def create_combined_plot(df_polar, df_glucose):
             mode="lines", line=dict(color="#e74c3c", width=2)
         ))
 
-    # HRV RMSSD (blau, in ms)
+    # HRV RMSSD (blau)
     if "hrv_rmssd" in df_polar.columns:
         fig.add_trace(go.Scatter(
             x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000, name="HRV RMSSD (ms)",
             mode="lines", yaxis="y2", line=dict(color="#2980b9", width=2)
         ))
 
-    # HRV SDNN (hellblau, ebenfalls in ms)
+    # HRV SDNN (hellblau)
     if "hrv_sdnn" in df_polar.columns:
         fig.add_trace(go.Scatter(
             x=df_polar.index, y=df_polar["hrv_sdnn"] * 1000, name="HRV SDNN (ms)",
@@ -144,6 +147,7 @@ def create_combined_plot(df_polar, df_glucose):
     return fig
 
 
+# === Hauptfunktion ===
 def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="💓", layout="wide")
 
@@ -163,33 +167,118 @@ def main():
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
-    # === METRIC OVERVIEW ===
-    st.markdown("### 🔍 Live-Übersicht")
-    cols = st.columns(3)
-    with cols[0]:
-        hr = metrics.get("avg_hr_60s")
-        delta = metrics.get("delta_hr")
-        st.metric("❤️ Herzfrequenz (60 s)", f"{hr:.1f} bpm" if hr else "–",
-                  f"{delta:+.1f} bpm" if delta else None)
-    with cols[1]:
-        hrv = metrics.get("avg_rmssd_60s")
-        delta_hrv = metrics.get("delta_rmssd")
-        st.metric("💓 HRV RMSSD (60 s)",
-                  f"{hrv * 1000:.1f} ms" if hrv else "–",
-                  f"{delta_hrv:+.1f} ms" if delta_hrv else None)
-    with cols[2]:
-        gl = metrics.get("latest_glucose")
-        st.metric("🩸 Glukose", f"{gl:.0f} mg/dL" if gl else "–")
+    # === NEUE GRAFISCHE LIVE-KARTEN ===
+    st.markdown("""
+        <style>
+        .metric-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+        .metric-card {
+            flex: 1;
+            border-radius: 20px;
+            padding: 24px 28px;
+            color: white;
+            position: relative;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            background: linear-gradient(135deg, #6A11CB, #2575FC);
+        }
+        .metric-title {
+            font-size: 16px;
+            letter-spacing: 0.5px;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }
+        .metric-value {
+            font-size: 48px;
+            font-weight: 700;
+            margin: 0;
+        }
+        .metric-unit {
+            font-size: 18px;
+            margin-left: 4px;
+            opacity: 0.85;
+        }
+        .metric-delta {
+            font-size: 16px;
+            margin-top: 6px;
+            opacity: 0.8;
+        }
+        .metric-interpret {
+            font-size: 14px;
+            opacity: 0.75;
+            margin-top: 8px;
+        }
+        .metric-icon {
+            position: absolute;
+            top: 18px;
+            right: 22px;
+            font-size: 28px;
+            opacity: 0.9;
+        }
+        .metric-live {
+            position: absolute;
+            bottom: 12px;
+            left: 24px;
+            font-size: 14px;
+            color: #9eff9e;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-    # === COMBINED PLOT ===
+    hr = metrics.get("avg_hr_60s")
+    delta_hr = metrics.get("delta_hr")
+    hrv = metrics.get("avg_rmssd_60s")
+    delta_hrv = metrics.get("delta_rmssd")
+    gl = metrics.get("latest_glucose")
+
+    def format_delta(value, unit):
+        if value is None:
+            return ""
+        arrow = "↗" if value > 0 else ("↘" if value < 0 else "→")
+        return f"{arrow} {value:+.1f} {unit}"
+
+    st.markdown(f"""
+    <div class="metric-container">
+        <div class="metric-card" style="background: linear-gradient(135deg, #e96443, #904e95);">
+            <div class="metric-icon">❤️</div>
+            <div class="metric-title">HERZFREQUENZ</div>
+            <div class="metric-value">{hr:.0f if hr else 0}<span class="metric-unit"> bpm</span></div>
+            <div class="metric-delta">{format_delta(delta_hr, "bpm")}</div>
+            <div class="metric-interpret">Herzaktivität aktuell</div>
+            <div class="metric-live">🟢 Live</div>
+        </div>
+
+        <div class="metric-card" style="background: linear-gradient(135deg, #2980b9, #6dd5fa);">
+            <div class="metric-icon">💓</div>
+            <div class="metric-title">HRV (RMSSD)</div>
+            <div class="metric-value">{(hrv*1000):.0f if hrv else 0}<span class="metric-unit"> ms</span></div>
+            <div class="metric-delta">{format_delta(delta_hrv, "ms")}</div>
+            <div class="metric-interpret">Vagal-Tonus / Stresslevel</div>
+            <div class="metric-live">🟢 Live</div>
+        </div>
+
+        <div class="metric-card" style="background: linear-gradient(135deg, #00b09b, #96c93d);">
+            <div class="metric-icon">🩸</div>
+            <div class="metric-title">GLUKOSE</div>
+            <div class="metric-value">{gl:.0f if gl else 0}<span class="metric-unit"> mg/dL</span></div>
+            <div class="metric-delta">↗ leicht steigend</div>
+            <div class="metric-interpret">Blutzucker im Normbereich</div>
+            <div class="metric-live">🟢 Live</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # === KOMBINIERTER PLOT ===
     st.subheader(f"📈 Gesamtsignal – letzte {window_minutes} Minuten")
     if not df_polar.empty or not df_glucose.empty:
-        st.container(border=True).plotly_chart(create_combined_plot(df_polar, df_glucose),
-                                               use_container_width=True)
+        st.container(border=True).plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
     else:
         st.info("Keine Daten im aktuellen Zeitraum verfügbar.")
 
-    # === EINZEL-CHARTS ===
+    # === EINZELCHARTS ===
     st.subheader(f"❤️ Herzfrequenz (HR) – letzte {window_minutes} Minuten")
     if not df_polar.empty:
         fig_hr = go.Figure()
