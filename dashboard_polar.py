@@ -79,6 +79,9 @@ def create_combined_plot(df_polar, df_glucose):
     if "hrv_rmssd" in df_polar.columns:
         fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000, name="HRV RMSSD (ms)",
                                  mode="lines", yaxis="y2", line=dict(color="#2980b9", width=2)))
+    if "hrv_sdnn" in df_polar.columns:
+        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"]*1000, name="HRV SDNN (ms)",
+                                 mode="lines", yaxis="y2", line=dict(color="#5dade2", width=2)))
     if not df_glucose.empty:
         fig.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"], name="Glukose (mg/dL)",
                                  mode="lines", yaxis="y3", line=dict(color="#27ae60", width=3)))
@@ -100,6 +103,9 @@ def create_combined_plot(df_polar, df_glucose):
 def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="💜", layout="wide")
 
+    # 🔁 Mini-Refresh für Live-Daten (nicht komplette Seite)
+    st.experimental_rerun_interval = 2000  # 2 Sekunden
+
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
     st.title("Biofeedback Dashboard – Polar & CGM")
@@ -110,7 +116,7 @@ def main():
     window_minutes = st.sidebar.slider("Zeitfenster (Minuten)", 5, 60, 15)
     st.session_state["window_minutes"] = window_minutes
 
-    # ❌ Kein automatischer Seiten-Refresh mehr
+    # Daten abrufen
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
@@ -120,7 +126,7 @@ def main():
     delta_hrv = metrics.get("delta_rmssd", 0)
     gl = metrics.get("latest_glucose", 0)
 
-    # === STIL mit pulsierendem Live-Indikator ===
+    # === Stil mit pulsierendem Live-Indikator ===
     html = f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
@@ -140,10 +146,6 @@ def main():
         box-shadow: 0 6px 20px rgba(0,0,0,0.25);
         transition: all 0.4s ease;
         position: relative;
-    }}
-    .metric-card:hover {{
-        transform: translateY(-3px);
-        box-shadow: 0 10px 25px rgba(0,0,0,0.35);
     }}
     .metric-title {{
         font-size: 13px;
@@ -246,6 +248,40 @@ def main():
         st.plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
     else:
         st.info("Keine Daten im aktuellen Zeitraum verfügbar.")
+
+    # Einzelcharts
+    if not df_polar.empty:
+        st.subheader(f"❤️ Herzfrequenz (HR)")
+        fig_hr = go.Figure()
+        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], mode="lines", line=dict(color="#e74c3c", width=2)))
+        st.plotly_chart(fig_hr, use_container_width=True)
+
+        st.subheader(f"💓 HRV (RMSSD & SDNN)")
+        fig_hrv = go.Figure()
+        if "hrv_rmssd" in df_polar.columns:
+            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000,
+                                         mode="lines", line=dict(color="#2980b9", width=2)))
+        if "hrv_sdnn" in df_polar.columns:
+            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"]*1000,
+                                         mode="lines", line=dict(color="#5dade2", width=2)))
+        st.plotly_chart(fig_hrv, use_container_width=True)
+
+    if not df_glucose.empty:
+        st.subheader(f"🩸 Glukose (CGM)")
+        fig_gl = go.Figure()
+        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y", y0=70, y1=140,
+                         fillcolor="rgba(46,204,113,0.2)", line=dict(width=0), layer="below")
+        fig_gl.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"],
+                                    mode="lines+markers", line=dict(color="#27ae60", width=2), marker=dict(size=4)))
+        st.plotly_chart(fig_gl, use_container_width=True)
+
+    # Tabellen
+    if not df_polar.empty:
+        st.subheader("🕒 Letzte Polar-Messwerte")
+        st.dataframe(df_polar.tail(10))
+    if not df_glucose.empty:
+        st.subheader("🕒 Letzte CGM-Messwerte")
+        st.dataframe(df_glucose.tail(10))
 
 
 if __name__ == "__main__":
