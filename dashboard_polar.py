@@ -7,6 +7,13 @@ import streamlit.components.v1 as components
 from pymongo import MongoClient
 import plotly.graph_objects as go
 
+# === Auto-Refresh (alle 2 Sekunden) ===
+try:
+    from streamlit_autorefresh import st_autorefresh
+except ModuleNotFoundError:
+    st_autorefresh = None
+
+
 # === MongoDB Verbindung ===
 def connect_to_mongo():
     MONGO_URI = os.getenv("MONGO_URI") or \
@@ -22,12 +29,14 @@ def connect_to_mongo():
     window_minutes = st.session_state.get("window_minutes", 15)
     time_threshold = now - timedelta(minutes=window_minutes)
 
+    # Polar-Daten
     polar_data = list(col_polar.find({"timestamp": {"$gte": time_threshold.isoformat()}}).sort("timestamp", 1))
     df_polar = pd.DataFrame(polar_data)
     if not df_polar.empty:
         df_polar["timestamp"] = pd.to_datetime(df_polar["timestamp"], errors="coerce")
         df_polar = df_polar.set_index("timestamp").sort_index()
 
+    # Glukose-Daten
     time_threshold_utc = (now - timedelta(minutes=window_minutes)).astimezone(pytz.UTC)
     glucose_data = list(col_glucose.find({"dateString": {"$gte": time_threshold_utc.isoformat()}}).sort("dateString", 1))
     df_glucose = pd.DataFrame(glucose_data)
@@ -35,6 +44,7 @@ def connect_to_mongo():
         df_glucose["timestamp"] = pd.to_datetime(df_glucose["dateString"], errors="coerce", utc=True)
         df_glucose["timestamp"] = df_glucose["timestamp"].dt.tz_convert("Europe/Zurich")
         df_glucose = df_glucose.set_index("timestamp").sort_index()
+
     return df_polar, df_glucose
 
 
@@ -103,8 +113,9 @@ def create_combined_plot(df_polar, df_glucose):
 def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="💜", layout="wide")
 
-    # 🔁 Mini-Refresh für Live-Daten (nicht komplette Seite)
-    st.experimental_rerun_interval = 2000  # 2 Sekunden
+    # Sanfter Auto-Refresh
+    if st_autorefresh:
+        st_autorefresh(interval=2000, key="live_refresh")
 
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
@@ -144,8 +155,8 @@ def main():
         font-family: 'Poppins', sans-serif;
         background: linear-gradient(160deg, #8B5CF6 0%, #6366F1 60%, #4F46E5 100%);
         box-shadow: 0 6px 20px rgba(0,0,0,0.25);
-        transition: all 0.4s ease;
         position: relative;
+        transition: all 0.4s ease;
     }}
     .metric-title {{
         font-size: 13px;
@@ -165,7 +176,6 @@ def main():
         font-weight: 500;
         opacity: 0.6;
         margin-left: 6px;
-        text-transform: uppercase;
     }}
     .metric-delta {{
         font-size: 15px;
@@ -251,12 +261,13 @@ def main():
 
     # Einzelcharts
     if not df_polar.empty:
-        st.subheader(f"❤️ Herzfrequenz (HR)")
+        st.subheader("❤️ Herzfrequenz (HR)")
         fig_hr = go.Figure()
-        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], mode="lines", line=dict(color="#e74c3c", width=2)))
+        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"],
+                                    mode="lines", line=dict(color="#e74c3c", width=2)))
         st.plotly_chart(fig_hr, use_container_width=True)
 
-        st.subheader(f"💓 HRV (RMSSD & SDNN)")
+        st.subheader("💓 HRV (RMSSD & SDNN)")
         fig_hrv = go.Figure()
         if "hrv_rmssd" in df_polar.columns:
             fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000,
@@ -267,9 +278,10 @@ def main():
         st.plotly_chart(fig_hrv, use_container_width=True)
 
     if not df_glucose.empty:
-        st.subheader(f"🩸 Glukose (CGM)")
+        st.subheader("🩸 Glukose (CGM)")
         fig_gl = go.Figure()
-        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y", y0=70, y1=140,
+        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1,
+                         yref="y", y0=70, y1=140,
                          fillcolor="rgba(46,204,113,0.2)", line=dict(width=0), layer="below")
         fig_gl.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"],
                                     mode="lines+markers", line=dict(color="#27ae60", width=2), marker=dict(size=4)))
