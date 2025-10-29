@@ -18,23 +18,15 @@ except ModuleNotFoundError:
 try:
     from streamlit_autorefresh import st_autorefresh
 except ModuleNotFoundError:
-    # st_autorefresh is part of streamlit‑extras; if it isn't installed
-    # the dashboard will run without auto refresh.
     st_autorefresh = None
 
 
 def connect_to_mongo() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Connect to MongoDB and return the polar and glucose dataframes.
-
-    Returns
-    -------
-    tuple of two pandas.DataFrame
-        The first dataframe contains Polar data with a datetime index.
-        The second dataframe contains CGM glucose data with a datetime index.
-    """
+    """Connect to MongoDB and return the polar and glucose dataframes."""
     MONGO_URI = os.getenv(
         "MONGO_URI"
     ) or "mongodb+srv://cocuzzam:MCETH2025@nightscout-db.21jfrwe.mongodb.net/?retryWrites=true&w=majority"
+
     client = MongoClient(MONGO_URI)
     db_polar = client["nightscout-db"]
     col_polar = db_polar["polar_data"]
@@ -46,53 +38,33 @@ def connect_to_mongo() -> tuple[pd.DataFrame, pd.DataFrame]:
     window_minutes = st.session_state.get("window_minutes", 15)
     time_threshold = now - timedelta(minutes=window_minutes)
 
-    # Fetch Polar data
+    # === Polar Data ===
     polar_data = list(
-        col_polar.find({"timestamp": {"$gte": time_threshold.isoformat()}}).sort(
-            "timestamp", 1
-        )
+        col_polar.find({"timestamp": {"$gte": time_threshold.isoformat()}}).sort("timestamp", 1)
     )
     df_polar = pd.DataFrame(polar_data)
     if not df_polar.empty:
         df_polar["timestamp"] = pd.to_datetime(df_polar["timestamp"], errors="coerce")
         df_polar = df_polar.set_index("timestamp").sort_index()
 
-    # Fetch glucose data
+    # === Glucose Data (Nightscout) ===
+    time_threshold_utc = (now - timedelta(minutes=window_minutes)).astimezone(pytz.UTC)
     glucose_data = list(
-        col_glucose.find({"dateString": {"$gte": time_threshold.isoformat()}}).sort(
-            "dateString", 1
-        )
+        col_glucose.find({"dateString": {"$gte": time_threshold_utc.isoformat()}}).sort("dateString", 1)
     )
     df_glucose = pd.DataFrame(glucose_data)
     if not df_glucose.empty:
-        df_glucose["timestamp"] = pd.to_datetime(
-            df_glucose["dateString"], errors="coerce"
-        )
+        df_glucose["timestamp"] = pd.to_datetime(df_glucose["dateString"], errors="coerce", utc=True)
+        df_glucose["timestamp"] = df_glucose["timestamp"].dt.tz_convert("Europe/Zurich")
         df_glucose = df_glucose.set_index("timestamp").sort_index()
 
     return df_polar, df_glucose
 
 
 def compute_metrics(df_polar: pd.DataFrame, df_glucose: pd.DataFrame, window_minutes: int) -> dict:
-    """Compute summary statistics for HR, HRV and glucose.
-
-    Parameters
-    ----------
-    df_polar : pandas.DataFrame
-        Polar data indexed by timestamp.
-    df_glucose : pandas.DataFrame
-        CGM data indexed by timestamp.
-    window_minutes : int
-        The length of the window over which to compute long term averages.
-
-    Returns
-    -------
-    dict
-        Dictionary of calculated averages, baseline values and deltas.
-    """
+    """Compute summary statistics for HR, HRV and glucose."""
     metrics = {}
     if not df_polar.empty:
-        # Define windows
         baseline_window = df_polar.last("10min")
         recent_data = df_polar.last("60s")
         long_window = df_polar.last(f"{window_minutes}min")
@@ -111,9 +83,8 @@ def compute_metrics(df_polar: pd.DataFrame, df_glucose: pd.DataFrame, window_min
         baseline_rmssd = baseline_window["hrv_rmssd"].mean() if not baseline_window.empty else None
         delta_rmssd = None
         if avg_rmssd_long and avg_rmssd_60s:
-            delta_rmssd = (avg_rmssd_60s - avg_rmssd_long) * 1000  # convert to ms
+            delta_rmssd = (avg_rmssd_60s - avg_rmssd_long) * 1000
 
-        # HRV SDNN means (if available)
         avg_sdnn_60s = None
         avg_sdnn_long = None
         if "hrv_sdnn" in df_polar.columns:
@@ -121,10 +92,7 @@ def compute_metrics(df_polar: pd.DataFrame, df_glucose: pd.DataFrame, window_min
             avg_sdnn_long = long_window["hrv_sdnn"].mean()
 
         # Determine neurophysiological state
-        state = None
-        state_desc = None
-        recommendation = None
-        state_color = None
+        state, state_desc, recommendation, state_color = None, None, None, None
         if baseline_rmssd and avg_rmssd_60s:
             ratio = avg_rmssd_60s / baseline_rmssd
             if ratio < 0.7:
@@ -170,74 +138,28 @@ def compute_metrics(df_polar: pd.DataFrame, df_glucose: pd.DataFrame, window_min
                 "latest_glucose": latest_glucose,
             }
         )
-
     return metrics
 
 
 def create_combined_plot(df_polar: pd.DataFrame, df_glucose: pd.DataFrame) -> go.Figure:
     """Create a combined Plotly figure for HR, HRV and Glucose."""
     fig = go.Figure()
-    # Heart Rate
     if not df_polar.empty and "hr" in df_polar.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=df_polar.index,
-                y=df_polar["hr"],
-                name="Herzfrequenz (bpm)",
-                mode="lines",
-            )
-        )
-    # HRV RMSSD (converted to ms)
+        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], name="Herzfrequenz (bpm)", mode="lines"))
     if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=df_polar.index,
-                y=df_polar["hrv_rmssd"] * 1000,
-                name="HRV RMSSD (ms)",
-                mode="lines",
-                yaxis="y2",
-            )
-        )
-    # Glucose
+        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000, name="HRV RMSSD (ms)", mode="lines", yaxis="y2"))
     if not df_glucose.empty and "sgv" in df_glucose.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=df_glucose.index,
-                y=df_glucose["sgv"],
-                name="Glukose (mg/dL)",
-                mode="lines",
-                yaxis="y3",
-            )
-        )
+        fig.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"], name="Glukose (mg/dL)", mode="lines", yaxis="y3"))
 
-    # Layout with multiple y axes similar to the original dashboard.
     fig.update_layout(
         template="plotly_white",
         height=450,
         margin=dict(l=0, r=0, t=0, b=0),
         xaxis=dict(title="Zeit"),
         yaxis=dict(title="HR (bpm)"),
-        yaxis2=dict(
-            title="HRV (ms)",
-            overlaying="y",
-            side="right",
-            position=0.9,
-            showgrid=False,
-        ),
-        yaxis3=dict(
-            title="Glukose (mg/dL)",
-            overlaying="y",
-            side="right",
-            position=1.0,
-            showgrid=False,
-        ),
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.2,
-            xanchor="center",
-            x=0.5,
-        ),
+        yaxis2=dict(title="HRV (ms)", overlaying="y", side="right", position=0.9, showgrid=False),
+        yaxis3=dict(title="Glukose (mg/dL)", overlaying="y", side="right", position=1.0, showgrid=False),
+        legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
     )
     return fig
 
@@ -247,31 +169,25 @@ def create_state_timeline(df_polar: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
     if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
         baseline_rmssd = df_polar["hrv_rmssd"].last("10min").mean()
-        # Map ratio to discrete state values
+
         def get_state_value(rmssd: float, baseline: float) -> int | None:
             if not baseline or rmssd is None:
                 return None
             ratio = rmssd / baseline
             if ratio < 0.7:
-                return 4  # High Stress
+                return 4
             elif ratio < 1.0:
-                return 3  # Mild Stress
+                return 3
             elif ratio < 1.3:
-                return 2  # Balanced
+                return 2
             else:
-                return 1  # Flow / Recovery
+                return 1
 
         df_polar = df_polar.copy()
-        df_polar["state_value"] = df_polar["hrv_rmssd"].apply(
-            lambda x: get_state_value(x, baseline_rmssd)
-        )
+        df_polar["state_value"] = df_polar["hrv_rmssd"].apply(lambda x: get_state_value(x, baseline_rmssd))
         state_colors = {1: "#2ecc71", 2: "#f1c40f", 3: "#f39c12", 4: "#e74c3c"}
-        state_names = {
-            1: "Flow / Recovery",
-            2: "Balanced",
-            3: "Mild Stress",
-            4: "High Stress",
-        }
+        state_names = {1: "Flow / Recovery", 2: "Balanced", 3: "Mild Stress", 4: "High Stress"}
+
         for value, color in state_colors.items():
             subset = df_polar[df_polar["state_value"] == value]
             if not subset.empty:
@@ -292,12 +208,7 @@ def create_state_timeline(df_polar: pd.DataFrame) -> go.Figure:
             height=350,
             yaxis=dict(
                 tickvals=[1, 2, 3, 4],
-                ticktext=[
-                    "Flow / Recovery",
-                    "Balanced",
-                    "Mild Stress",
-                    "High Stress",
-                ],
+                ticktext=["Flow / Recovery", "Balanced", "Mild Stress", "High Stress"],
                 range=[0.5, 4.5],
                 title="Zustand",
             ),
@@ -309,156 +220,99 @@ def create_state_timeline(df_polar: pd.DataFrame) -> go.Figure:
 
 def main() -> None:
     """Run the Streamlit app with a layout inspired by the Seattle Weather demo."""
-    st.set_page_config(
-        page_title="Biofeedback Dashboard – Polar & CGM",
-        page_icon="💓",
-        layout="wide",
-    )
+    st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="💓", layout="wide")
 
-    # Title and last update time
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
     st.title("Biofeedback Dashboard – Polar & CGM")
-    st.markdown(
-        f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>",
-        unsafe_allow_html=True,
-    )
+    st.markdown(f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>", unsafe_allow_html=True)
 
-    # Sidebar settings
     st.sidebar.header("⚙️ Einstellungen")
     window_minutes = st.sidebar.slider("Zeitfenster (in Minuten)", 5, 60, 15)
-    # Save to session state for use in data loading
     st.session_state["window_minutes"] = window_minutes
 
-    # Auto refresh every 2 seconds if st_autorefresh is available
     if st_autorefresh:
         st_autorefresh(interval=2000, key="datarefresh")
 
-    # Load data
     df_polar, df_glucose = connect_to_mongo()
-
-    # Compute metrics
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
-    # Summary metrics container
     with st.container(horizontal=True, gap="medium"):
         cols = st.columns(3, gap="medium")
-        # Heart Rate metric
+        # HR
         with cols[0]:
             hr_value = metrics.get("avg_hr_60s")
-            hr_long = metrics.get("avg_hr_long")
             delta_hr = metrics.get("delta_hr")
-            if hr_value is not None:
-                st.metric(
-                    label="❤️ Herzfrequenz (60 s)",
-                    value=f"{hr_value:.1f} bpm",
-                    delta=f"{delta_hr:+.1f} bpm" if delta_hr is not None else None,
-                )
-            else:
-                st.metric(label="❤️ Herzfrequenz (60 s)", value="–", delta=None)
-
-        # HRV metric
+            st.metric("❤️ Herzfrequenz (60 s)", f"{hr_value:.1f} bpm" if hr_value else "–",
+                      f"{delta_hr:+.1f} bpm" if delta_hr else None)
+        # HRV
         with cols[1]:
             rmssd_value = metrics.get("avg_rmssd_60s")
-            rmssd_long = metrics.get("avg_rmssd_long")
             delta_rmssd = metrics.get("delta_rmssd")
-            if rmssd_value is not None:
-                st.metric(
-                    label="💓 HRV RMSSD (60 s)",
-                    value=f"{rmssd_value * 1000:.1f} ms",
-                    delta=f"{delta_rmssd:+.1f} ms" if delta_rmssd is not None else None,
-                )
-            else:
-                st.metric(label="💓 HRV RMSSD (60 s)", value="–", delta=None)
-
-        # Glucose metric
+            st.metric("💓 HRV RMSSD (60 s)",
+                      f"{rmssd_value * 1000:.1f} ms" if rmssd_value else "–",
+                      f"{delta_rmssd:+.1f} ms" if delta_rmssd else None)
+        # Glucose + Trend
         with cols[2]:
             glucose_value = metrics.get("latest_glucose")
-            if glucose_value is not None:
-                st.metric(
-                    label="🩸 Glukose", value=f"{glucose_value:.0f} mg/dL", delta=None
-                )
+            if not df_glucose.empty and "delta" in df_glucose.columns:
+                glucose_delta = df_glucose["delta"].iloc[-1]
             else:
-                st.metric(label="🩸 Glukose", value="–", delta=None)
+                glucose_delta = None
+            if not df_glucose.empty and "direction" in df_glucose.columns:
+                glucose_direction = df_glucose["direction"].iloc[-1]
+            else:
+                glucose_direction = None
 
-    # Neurophysiological state and recommendation
-    state = metrics.get("state")
-    state_desc = metrics.get("state_desc")
-    recommendation = metrics.get("recommendation")
-    state_color = metrics.get("state_color")
+            if glucose_value is not None:
+                arrow = "➡️"
+                if glucose_direction == "DoubleUp": arrow = "⬆️⬆️"
+                elif glucose_direction == "SingleUp": arrow = "⬆️"
+                elif glucose_direction == "FortyFiveUp": arrow = "↗️"
+                elif glucose_direction == "Flat": arrow = "➡️"
+                elif glucose_direction == "FortyFiveDown": arrow = "↘️"
+                elif glucose_direction == "SingleDown": arrow = "⬇️"
+                elif glucose_direction == "DoubleDown": arrow = "⬇️⬇️"
 
+                delta_str = f"{glucose_delta:+.1f} mg/dL/min" if glucose_delta else None
+                st.metric(f"🩸 Glukose {arrow}", f"{glucose_value:.0f} mg/dL", delta_str)
+            else:
+                st.metric("🩸 Glukose", "–", None)
+
+    # Neuro state & recommendation
+    state, state_desc, recommendation, state_color = (
+        metrics.get("state"),
+        metrics.get("state_desc"),
+        metrics.get("recommendation"),
+        metrics.get("state_color"),
+    )
     if state:
         cols_state = st.columns(2)
         with cols_state[0].container(border=True, height="stretch"):
             st.subheader("🧠 Neurophysiologischer Zustand")
-            st.markdown(
-                f"<h3 style='color:{state_color}; font-weight:700; margin-top:4px;'>{state}</h3>",
-                unsafe_allow_html=True,
-            )
+            st.markdown(f"<h3 style='color:{state_color};font-weight:700;'>{state}</h3>", unsafe_allow_html=True)
             st.markdown(state_desc)
         with cols_state[1].container(border=True, height="stretch"):
             st.subheader("💡 Empfehlung")
             st.markdown(recommendation)
     else:
-        st.warning("Warte auf ausreichende HRV-Daten zur Analyse …")
+        st.warning("Warte auf ausreichende HRV-Daten …")
 
-    # Combined signals overview
-    st.subheader(f"📈 Gesamtsignal-Übersicht – letzte {window_minutes} Minuten")
+    st.subheader(f"📈 Gesamtsignal – letzte {window_minutes} Minuten")
     if not df_polar.empty or not df_glucose.empty:
-        fig = create_combined_plot(df_polar, df_glucose)
-        st.container(border=True, height="stretch").plotly_chart(fig, use_container_width=True)
+        st.container(border=True, height="stretch").plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
     else:
         st.info("Keine Daten im aktuellen Zeitraum verfügbar.")
 
-    # Individual charts
-    # Heart Rate
-    st.subheader(f"❤️ Herzfrequenz (HR) – letzte {window_minutes} Minuten")
-    if not df_polar.empty and "hr" in df_polar.columns:
-        with st.container(border=True, height="stretch"):
-            st.line_chart(df_polar[["hr"]])
-    else:
-        st.info("Keine Herzfrequenzdaten verfügbar.")
-
-    # HRV parameters
-    st.subheader(f"💓 HRV-Parameter (RMSSD & SDNN) – letzte {window_minutes} Minuten")
-    if not df_polar.empty and all(col in df_polar.columns for col in ["hrv_rmssd", "hrv_sdnn"]):
-        with st.container(border=True, height="stretch"):
-            st.line_chart(df_polar[["hrv_rmssd", "hrv_sdnn"]])
-    else:
-        st.info("Keine HRV-Daten verfügbar.")
-
-    # Glucose
     st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
     if not df_glucose.empty and "sgv" in df_glucose.columns:
-        with st.container(border=True, height="stretch"):
-            st.line_chart(df_glucose[["sgv"]])
+        st.container(border=True, height="stretch").line_chart(df_glucose[["sgv"]])
     else:
         st.info("Keine CGM-Daten verfügbar.")
 
-    # Neuro state timeline
-    st.subheader(
-        f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten"
-    )
-    if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
-        timeline_fig = create_state_timeline(df_polar)
-        st.container(border=True, height="stretch").plotly_chart(
-            timeline_fig, use_container_width=True
-        )
-    else:
-        st.info("Keine ausreichenden HRV-Daten zur Bestimmung des Zustandes.")
-
-    # Data tables
-    if not df_polar.empty:
-        st.subheader("🕒 Letzte Polar-Messwerte")
-        with st.container(border=True, height="stretch"):
-            st.dataframe(df_polar.tail(10))
-    else:
-        st.info("Keine Polar-Messwerte verfügbar.")
-
     if not df_glucose.empty:
         st.subheader("🕒 Letzte CGM-Messwerte")
-        with st.container(border=True, height="stretch"):
-            st.dataframe(df_glucose.tail(10))
+        st.container(border=True, height="stretch").dataframe(df_glucose.tail(10))
     else:
         st.info("Keine CGM-Messwerte verfügbar.")
 
