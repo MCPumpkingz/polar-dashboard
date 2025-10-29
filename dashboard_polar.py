@@ -113,21 +113,18 @@ def create_combined_plot(df_polar, df_glucose):
 def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="💜", layout="wide")
 
-    # Sanfter Auto-Refresh
     if st_autorefresh:
         st_autorefresh(interval=2000, key="live_refresh")
 
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
     st.title("Biofeedback Dashboard – Polar & CGM")
-    st.markdown(f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>",
-                unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>", unsafe_allow_html=True)
 
     st.sidebar.header("⚙️ Einstellungen")
     window_minutes = st.sidebar.slider("Zeitfenster (Minuten)", 5, 60, 15)
     st.session_state["window_minutes"] = window_minutes
 
-    # Daten abrufen
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
@@ -137,8 +134,8 @@ def main():
     delta_hrv = metrics.get("delta_rmssd", 0)
     gl = metrics.get("latest_glucose", 0)
 
-    # === Stil mit pulsierendem Live-Indikator ===
-    html = f"""
+    # === Obere Live-Karten ===
+    components.html(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
     .metric-container {{
@@ -156,69 +153,15 @@ def main():
         background: linear-gradient(160deg, #8B5CF6 0%, #6366F1 60%, #4F46E5 100%);
         box-shadow: 0 6px 20px rgba(0,0,0,0.25);
         position: relative;
-        transition: all 0.4s ease;
     }}
-    .metric-title {{
-        font-size: 13px;
-        letter-spacing: 1px;
-        opacity: 0.85;
-        text-transform: uppercase;
-        margin-bottom: 8px;
-    }}
-    .metric-value {{
-        font-size: 54px;
-        font-weight: 700;
-        margin: 0;
-        line-height: 1.1;
-    }}
-    .metric-unit {{
-        font-size: 16px;
-        font-weight: 500;
-        opacity: 0.6;
-        margin-left: 6px;
-    }}
-    .metric-delta {{
-        font-size: 15px;
-        margin-top: 12px;
-        opacity: 0.85;
-    }}
-    .metric-interpret {{
-        font-size: 14px;
-        opacity: 0.8;
-        margin-top: 4px;
-    }}
-    .metric-icon {{
-        position: absolute;
-        top: 20px;
-        right: 22px;
-        font-size: 22px;
-        background: rgba(255,255,255,0.08);
-        padding: 6px 10px;
-        border-radius: 10px;
-    }}
-    .metric-live {{
-        position: absolute;
-        bottom: 14px;
-        left: 22px;
-        font-size: 13px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        color: #b5f5b5;
-    }}
-    .pulse {{
-        width: 8px;
-        height: 8px;
-        background-color: #00ff6a;
-        border-radius: 50%;
-        animation: pulse 1.5s infinite;
-        box-shadow: 0 0 5px #00ff6a;
-    }}
-    @keyframes pulse {{
-        0% {{ opacity: 0.4; transform: scale(0.9); }}
-        50% {{ opacity: 1; transform: scale(1.3); }}
-        100% {{ opacity: 0.4; transform: scale(0.9); }}
-    }}
+    .metric-title {{ font-size: 13px; letter-spacing: 1px; opacity: 0.85; text-transform: uppercase; margin-bottom: 8px; }}
+    .metric-value {{ font-size: 54px; font-weight: 700; margin: 0; line-height: 1.1; }}
+    .metric-unit {{ font-size: 16px; font-weight: 500; opacity: 0.6; margin-left: 6px; }}
+    .metric-delta {{ font-size: 15px; margin-top: 12px; opacity: 0.85; }}
+    .metric-interpret {{ font-size: 14px; opacity: 0.8; margin-top: 4px; }}
+    .metric-icon {{ position: absolute; top: 20px; right: 22px; font-size: 22px; opacity: 0.9; }}
+    .pulse {{ width: 8px; height: 8px; background-color: #00ff6a; border-radius: 50%; animation: pulse 1.5s infinite; box-shadow: 0 0 5px #00ff6a; display: inline-block; }}
+    @keyframes pulse {{ 0% {{opacity:0.4;transform:scale(0.9);}} 50% {{opacity:1;transform:scale(1.3);}} 100% {{opacity:0.4;transform:scale(0.9);}} }}
     </style>
 
     <div class="metric-container">
@@ -228,66 +171,88 @@ def main():
             <div class="metric-value">{hr:.0f}<span class="metric-unit">BPM</span></div>
             <div class="metric-delta">{'↗' if delta_hr > 0 else '↘' if delta_hr < 0 else '→'} {delta_hr:+.1f} bpm</div>
             <div class="metric-interpret">Herzaktivität aktuell</div>
-            <div class="metric-live"><div class="pulse"></div>Live</div>
+            <div style="position:absolute;bottom:14px;left:22px;font-size:13px;color:#9eff9e;"><span class="pulse"></span> Live</div>
         </div>
-
         <div class="metric-card">
             <div class="metric-icon">💓</div>
             <div class="metric-title">HRV (RMSSD)</div>
             <div class="metric-value">{hrv*1000:.0f}<span class="metric-unit">MS</span></div>
             <div class="metric-delta">{'↗' if delta_hrv > 0 else '↘' if delta_hrv < 0 else '→'} {delta_hrv:+.1f} ms</div>
             <div class="metric-interpret">Vagal-Tonus / Stresslevel</div>
-            <div class="metric-live"><div class="pulse"></div>Live</div>
+            <div style="position:absolute;bottom:14px;left:22px;font-size:13px;color:#9eff9e;"><span class="pulse"></span> Live</div>
         </div>
-
         <div class="metric-card">
             <div class="metric-icon">🩸</div>
             <div class="metric-title">GLUKOSE</div>
             <div class="metric-value">{gl:.0f}<span class="metric-unit">MG/DL</span></div>
             <div class="metric-delta">↗ leicht steigend</div>
             <div class="metric-interpret">Blutzucker im Normbereich</div>
-            <div class="metric-live"><div class="pulse"></div>Live</div>
+            <div style="position:absolute;bottom:14px;left:22px;font-size:13px;color:#9eff9e;"><span class="pulse"></span> Live</div>
         </div>
     </div>
-    """
-    components.html(html, height=260)
+    """, height=270)
 
-    # === Charts ===
+    # === Erweiterbare KPI-Bereiche ===
+    st.markdown("## 🧩 Erweiterte physiologische Kennzahlen")
+
+    with st.expander("🧠 Autonomes Nervensystem (HRV)"):
+        st.table(pd.DataFrame({
+            "KPI": ["RMSSD", "SDNN", "LF/HF Ratio"],
+            "Wert": ["72 ms", "95 ms", "1.6"],
+            "Interpretation": ["Parasympathische Aktivität", "Gesamt-HRV", "Sympathikus/Parasympathikus Balance"]
+        }))
+
+    with st.expander("❤️ Kardiovaskuläre Dynamik"):
+        st.table(pd.DataFrame({
+            "KPI": ["Durchschn. HR (5 min)", "CV% HRV", "RSA (Atmungskopplung)"],
+            "Wert": ["68 bpm", "12%", "85 ms"],
+            "Interpretation": ["Herzaktivität", "HRV-Stabilität", "Atmungsgekoppelte HRV"]
+        }))
+
+    with st.expander("🩸 Glukose-Metabolismus"):
+        st.table(pd.DataFrame({
+            "KPI": ["Δ Glukose (15 min)", "Mittelwert (30 min)", "Variabilität (CV%)"],
+            "Wert": ["+8 mg/dL", "101 mg/dL", "9%"],
+            "Interpretation": ["Postprandiale Phase", "Kurzzeitniveau", "Stabilität"]
+        }))
+
+    with st.expander("⏱ Kontextuelle Marker"):
+        st.table(pd.DataFrame({
+            "KPI": ["Zeit seit Mahlzeit", "Zeit seit Stressereignis"],
+            "Wert": ["78 min", "120 min"],
+            "Interpretation": ["Verdauungsphase", "Erholungsstatus"]
+        }))
+
+    # === Charts & Tabellen (wie bisher) ===
     st.subheader(f"📈 Gesamtsignal – letzte {window_minutes} Minuten")
     if not df_polar.empty or not df_glucose.empty:
         st.plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
     else:
         st.info("Keine Daten im aktuellen Zeitraum verfügbar.")
 
-    # Einzelcharts
     if not df_polar.empty:
         st.subheader("❤️ Herzfrequenz (HR)")
         fig_hr = go.Figure()
-        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"],
-                                    mode="lines", line=dict(color="#e74c3c", width=2)))
+        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], mode="lines", line=dict(color="#e74c3c", width=2)))
         st.plotly_chart(fig_hr, use_container_width=True)
 
         st.subheader("💓 HRV (RMSSD & SDNN)")
         fig_hrv = go.Figure()
         if "hrv_rmssd" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000,
-                                         mode="lines", line=dict(color="#2980b9", width=2)))
+            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000, mode="lines", line=dict(color="#2980b9", width=2)))
         if "hrv_sdnn" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"]*1000,
-                                         mode="lines", line=dict(color="#5dade2", width=2)))
+            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"]*1000, mode="lines", line=dict(color="#5dade2", width=2)))
         st.plotly_chart(fig_hrv, use_container_width=True)
 
     if not df_glucose.empty:
         st.subheader("🩸 Glukose (CGM)")
         fig_gl = go.Figure()
-        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1,
-                         yref="y", y0=70, y1=140,
+        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y", y0=70, y1=140,
                          fillcolor="rgba(46,204,113,0.2)", line=dict(width=0), layer="below")
         fig_gl.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"],
                                     mode="lines+markers", line=dict(color="#27ae60", width=2), marker=dict(size=4)))
         st.plotly_chart(fig_gl, use_container_width=True)
 
-    # Tabellen
     if not df_polar.empty:
         st.subheader("🕒 Letzte Polar-Messwerte")
         st.dataframe(df_polar.tail(10))
