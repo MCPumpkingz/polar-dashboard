@@ -72,7 +72,6 @@ def compute_metrics(df_polar: pd.DataFrame, df_glucose: pd.DataFrame, window_min
         # Heart rate means
         avg_hr_60s = recent_data["hr"].mean()
         avg_hr_long = long_window["hr"].mean()
-        baseline_hr = baseline_window["hr"].mean() if not baseline_window.empty else None
         delta_hr = None
         if avg_hr_long and avg_hr_60s:
             delta_hr = avg_hr_60s - avg_hr_long
@@ -80,7 +79,6 @@ def compute_metrics(df_polar: pd.DataFrame, df_glucose: pd.DataFrame, window_min
         # HRV RMSSD means (in seconds, convert to ms when displayed)
         avg_rmssd_60s = recent_data["hrv_rmssd"].mean()
         avg_rmssd_long = long_window["hrv_rmssd"].mean()
-        baseline_rmssd = baseline_window["hrv_rmssd"].mean() if not baseline_window.empty else None
         delta_rmssd = None
         if avg_rmssd_long and avg_rmssd_60s:
             delta_rmssd = (avg_rmssd_60s - avg_rmssd_long) * 1000
@@ -90,31 +88,6 @@ def compute_metrics(df_polar: pd.DataFrame, df_glucose: pd.DataFrame, window_min
         if "hrv_sdnn" in df_polar.columns:
             avg_sdnn_60s = recent_data["hrv_sdnn"].mean()
             avg_sdnn_long = long_window["hrv_sdnn"].mean()
-
-        # Determine neurophysiological state
-        state, state_desc, recommendation, state_color = None, None, None, None
-        if baseline_rmssd and avg_rmssd_60s:
-            ratio = avg_rmssd_60s / baseline_rmssd
-            if ratio < 0.7:
-                state = "High Stress"
-                state_desc = "Stark sympathische Aktivierung – **Fight or Flight**."
-                recommendation = "🌬️ 4-7-8-Atmung oder 6 Atemzüge/min zur Aktivierung des Vagusnervs."
-                state_color = "#e74c3c"
-            elif ratio < 1.0:
-                state = "Mild Stress"
-                state_desc = "Leichte sympathische Aktivierung – du bist **fokussiert**, aber angespannt."
-                recommendation = "🫁 Längeres Ausatmen (4 s ein / 8 s aus)."
-                state_color = "#f39c12"
-            elif ratio < 1.3:
-                state = "Balanced"
-                state_desc = "Dein Nervensystem ist in **Balance**."
-                recommendation = "☯️ Box Breathing (4-4-4-4) zur Stabilisierung."
-                state_color = "#f1c40f"
-            else:
-                state = "Recovery / Flow"
-                state_desc = "Hohe parasympathische Aktivität – du bist im **Erholungsmodus**."
-                recommendation = "🧘 Meditation oder ruhige Atmung fördern Flow & Regeneration."
-                state_color = "#2ecc71"
 
         # Latest glucose value
         latest_glucose = None
@@ -131,10 +104,6 @@ def compute_metrics(df_polar: pd.DataFrame, df_glucose: pd.DataFrame, window_min
                 "delta_rmssd": delta_rmssd,
                 "avg_sdnn_60s": avg_sdnn_60s,
                 "avg_sdnn_long": avg_sdnn_long,
-                "state": state,
-                "state_desc": state_desc,
-                "recommendation": recommendation,
-                "state_color": state_color,
                 "latest_glucose": latest_glucose,
             }
         )
@@ -161,60 +130,6 @@ def create_combined_plot(df_polar: pd.DataFrame, df_glucose: pd.DataFrame) -> go
         yaxis3=dict(title="Glukose (mg/dL)", overlaying="y", side="right", position=1.0, showgrid=False),
         legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
     )
-    return fig
-
-
-def create_state_timeline(df_polar: pd.DataFrame) -> go.Figure:
-    """Create a timeline figure for the neurophysiological state over time."""
-    fig = go.Figure()
-    if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
-        baseline_rmssd = df_polar["hrv_rmssd"].last("10min").mean()
-
-        def get_state_value(rmssd: float, baseline: float) -> int | None:
-            if not baseline or rmssd is None:
-                return None
-            ratio = rmssd / baseline
-            if ratio < 0.7:
-                return 4
-            elif ratio < 1.0:
-                return 3
-            elif ratio < 1.3:
-                return 2
-            else:
-                return 1
-
-        df_polar = df_polar.copy()
-        df_polar["state_value"] = df_polar["hrv_rmssd"].apply(lambda x: get_state_value(x, baseline_rmssd))
-        state_colors = {1: "#2ecc71", 2: "#f1c40f", 3: "#f39c12", 4: "#e74c3c"}
-        state_names = {1: "Flow / Recovery", 2: "Balanced", 3: "Mild Stress", 4: "High Stress"}
-
-        for value, color in state_colors.items():
-            subset = df_polar[df_polar["state_value"] == value]
-            if not subset.empty:
-                fig.add_trace(
-                    go.Scatter(
-                        x=subset.index,
-                        y=subset["state_value"],
-                        mode="lines",
-                        line=dict(width=0.5, color=color),
-                        fill="tozeroy",
-                        fillcolor=color,
-                        name=state_names[value],
-                        opacity=0.7,
-                    )
-                )
-        fig.update_layout(
-            template="plotly_white",
-            height=350,
-            yaxis=dict(
-                tickvals=[1, 2, 3, 4],
-                ticktext=["Flow / Recovery", "Balanced", "Mild Stress", "High Stress"],
-                range=[0.5, 4.5],
-                title="Zustand",
-            ),
-            xaxis=dict(title="Zeit"),
-            showlegend=True,
-        )
     return fig
 
 
@@ -267,25 +182,6 @@ def main() -> None:
             else:
                 st.metric("🩸 Glukose", "–", None)
 
-    # === Neurophysiologischer Zustand ===
-    state, state_desc, recommendation, state_color = (
-        metrics.get("state"),
-        metrics.get("state_desc"),
-        metrics.get("recommendation"),
-        metrics.get("state_color"),
-    )
-    if state:
-        cols_state = st.columns(2)
-        with cols_state[0].container(border=True, height="stretch"):
-            st.subheader("🧠 Neurophysiologischer Zustand")
-            st.markdown(f"<h3 style='color:{state_color};font-weight:700;'>{state}</h3>", unsafe_allow_html=True)
-            st.markdown(state_desc)
-        with cols_state[1].container(border=True, height="stretch"):
-            st.subheader("💡 Empfehlung")
-            st.markdown(recommendation)
-    else:
-        st.warning("Warte auf ausreichende HRV-Daten …")
-
     # === Combined signal ===
     st.subheader(f"📈 Gesamtsignal – letzte {window_minutes} Minuten")
     if not df_polar.empty or not df_glucose.empty:
@@ -312,13 +208,6 @@ def main() -> None:
         st.container(border=True, height="stretch").line_chart(df_glucose[["sgv"]])
     else:
         st.info("Keine CGM-Daten verfügbar.")
-
-    # === Neurophysiologischer Verlauf ===
-    st.subheader(f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten")
-    if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
-        st.container(border=True, height="stretch").plotly_chart(create_state_timeline(df_polar), use_container_width=True)
-    else:
-        st.info("Keine ausreichenden HRV-Daten zur Bestimmung des Zustandes.")
 
     # === Data tables ===
     if not df_polar.empty:
