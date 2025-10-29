@@ -61,42 +61,6 @@ def connect_to_mongo() -> tuple[pd.DataFrame, pd.DataFrame]:
     return df_polar, df_glucose
 
 
-def compute_metrics(df_polar: pd.DataFrame, df_glucose: pd.DataFrame, window_minutes: int) -> dict:
-    """Compute summary statistics for HR, HRV and glucose."""
-    metrics = {}
-    if not df_polar.empty:
-        recent_data = df_polar.last("60s")
-        long_window = df_polar.last(f"{window_minutes}min")
-
-        avg_hr_60s = recent_data["hr"].mean()
-        avg_hr_long = long_window["hr"].mean()
-        delta_hr = avg_hr_60s - avg_hr_long if avg_hr_long and avg_hr_60s else None
-
-        avg_rmssd_60s = recent_data["hrv_rmssd"].mean()
-        avg_rmssd_long = long_window["hrv_rmssd"].mean()
-        delta_rmssd = (avg_rmssd_60s - avg_rmssd_long) * 1000 if avg_rmssd_long and avg_rmssd_60s else None
-
-        avg_sdnn_60s = recent_data["hrv_sdnn"].mean() if "hrv_sdnn" in df_polar.columns else None
-        avg_sdnn_long = long_window["hrv_sdnn"].mean() if "hrv_sdnn" in df_polar.columns else None
-
-        latest_glucose = df_glucose["sgv"].iloc[-1] if not df_glucose.empty and "sgv" in df_glucose.columns else None
-
-        metrics.update(
-            {
-                "avg_hr_60s": avg_hr_60s,
-                "avg_hr_long": avg_hr_long,
-                "delta_hr": delta_hr,
-                "avg_rmssd_60s": avg_rmssd_60s,
-                "avg_rmssd_long": avg_rmssd_long,
-                "delta_rmssd": delta_rmssd,
-                "avg_sdnn_60s": avg_sdnn_60s,
-                "avg_sdnn_long": avg_sdnn_long,
-                "latest_glucose": latest_glucose,
-            }
-        )
-    return metrics
-
-
 def create_combined_plot(df_polar: pd.DataFrame, df_glucose: pd.DataFrame) -> go.Figure:
     """Combined HR + HRV + Glucose plot with auto-scaled glucose axis."""
     fig = go.Figure()
@@ -110,7 +74,7 @@ def create_combined_plot(df_polar: pd.DataFrame, df_glucose: pd.DataFrame) -> go
         y_min = max(40, g_min - padding)
         y_max = min(250, g_max + padding)
 
-    # HR
+    # HR (rot)
     if not df_polar.empty and "hr" in df_polar.columns:
         fig.add_trace(
             go.Scatter(
@@ -118,10 +82,10 @@ def create_combined_plot(df_polar: pd.DataFrame, df_glucose: pd.DataFrame) -> go
                 y=df_polar["hr"],
                 name="Herzfrequenz (bpm)",
                 mode="lines",
-                line=dict(color="#e67e22", width=2)
+                line=dict(color="#e74c3c", width=2)
             )
         )
-    # HRV RMSSD
+    # HRV RMSSD (blau)
     if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
         fig.add_trace(
             go.Scatter(
@@ -130,10 +94,22 @@ def create_combined_plot(df_polar: pd.DataFrame, df_glucose: pd.DataFrame) -> go
                 name="HRV RMSSD (ms)",
                 mode="lines",
                 yaxis="y2",
-                line=dict(color="#3498db", width=2)
+                line=dict(color="#2980b9", width=2)
             )
         )
-    # Glucose
+    # HRV SDNN (hellblau)
+    if not df_polar.empty and "hrv_sdnn" in df_polar.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df_polar.index,
+                y=df_polar["hrv_sdnn"],
+                name="HRV SDNN (ms)",
+                mode="lines",
+                yaxis="y2",
+                line=dict(color="#5dade2", width=2, dash="dot")
+            )
+        )
+    # Glucose (grün)
     if not df_glucose.empty and "sgv" in df_glucose.columns:
         fig.add_trace(
             go.Scatter(
@@ -142,7 +118,7 @@ def create_combined_plot(df_polar: pd.DataFrame, df_glucose: pd.DataFrame) -> go
                 name="Glukose (mg/dL)",
                 mode="lines",
                 yaxis="y3",
-                line=dict(color="#2ecc71", width=3, shape="spline")
+                line=dict(color="#27ae60", width=3, shape="spline")
             )
         )
 
@@ -176,14 +152,16 @@ def create_combined_plot(df_polar: pd.DataFrame, df_glucose: pd.DataFrame) -> go
     return fig
 
 
-def main() -> None:
-    """Run the Streamlit app."""
+def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="💓", layout="wide")
 
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
     st.title("Biofeedback Dashboard – Polar & CGM")
-    st.markdown(f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>",
+        unsafe_allow_html=True,
+    )
 
     st.sidebar.header("⚙️ Einstellungen")
     window_minutes = st.sidebar.slider("Zeitfenster (in Minuten)", 5, 60, 15)
@@ -193,48 +171,45 @@ def main() -> None:
         st_autorefresh(interval=2000, key="datarefresh")
 
     df_polar, df_glucose = connect_to_mongo()
-    metrics = compute_metrics(df_polar, df_glucose, window_minutes)
-
-    # === Summary metrics ===
-    with st.container(horizontal=True, gap="medium"):
-        cols = st.columns(3, gap="medium")
-        with cols[0]:
-            hr_value = metrics.get("avg_hr_60s")
-            delta_hr = metrics.get("delta_hr")
-            st.metric("❤️ Herzfrequenz (60 s)", f"{hr_value:.1f} bpm" if hr_value else "–",
-                      f"{delta_hr:+.1f} bpm" if delta_hr else None)
-        with cols[1]:
-            rmssd_value = metrics.get("avg_rmssd_60s")
-            delta_rmssd = metrics.get("delta_rmssd")
-            st.metric("💓 HRV RMSSD (60 s)",
-                      f"{rmssd_value * 1000:.1f} ms" if rmssd_value else "–",
-                      f"{delta_rmssd:+.1f} ms" if delta_rmssd else None)
-        with cols[2]:
-            glucose_value = metrics.get("latest_glucose")
-            st.metric("🩸 Glukose", f"{glucose_value:.0f} mg/dL" if glucose_value else "–")
 
     # === Combined signal ===
     st.subheader(f"📈 Gesamtsignal – letzte {window_minutes} Minuten")
     if not df_polar.empty or not df_glucose.empty:
-        st.container(border=True, height="stretch").plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
+        combined_fig = create_combined_plot(df_polar, df_glucose)
+        st.container(border=True, height="stretch").plotly_chart(combined_fig, use_container_width=True)
     else:
         st.info("Keine Daten im aktuellen Zeitraum verfügbar.")
 
     # === Einzelcharts ===
     st.subheader(f"❤️ Herzfrequenz (HR) – letzte {window_minutes} Minuten")
     if not df_polar.empty and "hr" in df_polar.columns:
-        st.container(border=True, height="stretch").line_chart(df_polar[["hr"]])
-    else:
-        st.info("Keine Herzfrequenzdaten verfügbar.")
+        fig_hr = go.Figure()
+        fig_hr.add_trace(
+            go.Scatter(x=df_polar.index, y=df_polar["hr"], mode="lines", line=dict(color="#e74c3c", width=2), name="Herzfrequenz (bpm)")
+        )
+        fig_hr.update_layout(template="plotly_white", height=300, margin=dict(l=0, r=0, t=0, b=0),
+                             xaxis=dict(title="Zeit", range=[df_polar.index.min(), df_polar.index.max()]),
+                             yaxis=dict(title="HR (bpm)"))
+        st.container(border=True, height="stretch").plotly_chart(fig_hr, use_container_width=True)
 
     st.subheader(f"💓 HRV-Parameter (RMSSD & SDNN) – letzte {window_minutes} Minuten")
-    if not df_polar.empty and any(col in df_polar.columns for col in ["hrv_rmssd", "hrv_sdnn"]):
-        cols_to_plot = [c for c in ["hrv_rmssd", "hrv_sdnn"] if c in df_polar.columns]
-        st.container(border=True, height="stretch").line_chart(df_polar[cols_to_plot])
-    else:
-        st.info("Keine HRV-Daten verfügbar.")
+    if not df_polar.empty and any(c in df_polar.columns for c in ["hrv_rmssd", "hrv_sdnn"]):
+        fig_hrv = go.Figure()
+        if "hrv_rmssd" in df_polar.columns:
+            fig_hrv.add_trace(
+                go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"], mode="lines",
+                           line=dict(color="#2980b9", width=2), name="HRV RMSSD")
+            )
+        if "hrv_sdnn" in df_polar.columns:
+            fig_hrv.add_trace(
+                go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"], mode="lines",
+                           line=dict(color="#5dade2", width=2, dash="dot"), name="HRV SDNN")
+            )
+        fig_hrv.update_layout(template="plotly_white", height=300, margin=dict(l=0, r=0, t=0, b=0),
+                              xaxis=dict(title="Zeit", range=[df_polar.index.min(), df_polar.index.max()]),
+                              yaxis=dict(title="HRV (s)"))
+        st.container(border=True, height="stretch").plotly_chart(fig_hrv, use_container_width=True)
 
-    # === CGM Plot (auto-scaled + target zone) ===
     st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
     if not df_glucose.empty and "sgv" in df_glucose.columns:
         min_val = df_glucose["sgv"].min()
@@ -244,44 +219,18 @@ def main() -> None:
         y_max = min(250, max_val + padding)
 
         fig_glucose = go.Figure()
-        fig_glucose.add_shape(
-            type="rect",
-            xref="paper", x0=0, x1=1,
-            yref="y", y0=70, y1=140,
-            fillcolor="rgba(46, 204, 113, 0.2)",
-            line=dict(width=0),
-            layer="below"
-        )
+        fig_glucose.add_shape(type="rect", xref="paper", x0=0, x1=1,
+                              yref="y", y0=70, y1=140,
+                              fillcolor="rgba(46, 204, 113, 0.2)", line=dict(width=0), layer="below")
         fig_glucose.add_trace(
-            go.Scatter(
-                x=df_glucose.index,
-                y=df_glucose["sgv"],
-                mode="lines+markers",
-                name="Glukose (mg/dL)",
-                line=dict(color="#e74c3c", width=2),
-                marker=dict(size=4)
-            )
+            go.Scatter(x=df_glucose.index, y=df_glucose["sgv"], mode="lines+markers",
+                       line=dict(color="#27ae60", width=2), marker=dict(size=4), name="Glukose (mg/dL)")
         )
-        fig_glucose.update_layout(
-            template="plotly_white",
-            height=300,
-            margin=dict(l=0, r=0, t=0, b=0),
-            xaxis=dict(title="Zeit"),
-            yaxis=dict(title="Glukose (mg/dL)", range=[y_min, y_max]),
-            showlegend=False,
-        )
+        fig_glucose.update_layout(template="plotly_white", height=300, margin=dict(l=0, r=0, t=0, b=0),
+                                  xaxis=dict(title="Zeit", range=[df_polar.index.min(), df_polar.index.max()]),
+                                  yaxis=dict(title="Glukose (mg/dL)", range=[y_min, y_max]))
         st.container(border=True, height="stretch").plotly_chart(fig_glucose, use_container_width=True)
         st.markdown(f"<small>Y-Achse automatisch skaliert ({y_min:.0f}–{y_max:.0f} mg/dL), Zielbereich 70–140 mg/dL (grün)</small>", unsafe_allow_html=True)
-    else:
-        st.info("Keine CGM-Daten verfügbar.")
-
-    # === Data tables ===
-    if not df_polar.empty:
-        st.subheader("🕒 Letzte Polar-Messwerte")
-        st.container(border=True, height="stretch").dataframe(df_polar.tail(10))
-    if not df_glucose.empty:
-        st.subheader("🕒 Letzte CGM-Messwerte")
-        st.container(border=True, height="stretch").dataframe(df_glucose.tail(10))
 
 
 if __name__ == "__main__":
