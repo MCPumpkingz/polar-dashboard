@@ -21,7 +21,7 @@ except ModuleNotFoundError:
     st_autorefresh = None
 
 
-# === Datenbank-Verbindung ===
+# === MongoDB Verbindung ===
 def connect_to_mongo():
     MONGO_URI = os.getenv("MONGO_URI") or \
         "mongodb+srv://cocuzzam:MCETH2025@nightscout-db.21jfrwe.mongodb.net/?retryWrites=true&w=majority"
@@ -112,10 +112,10 @@ def create_combined_plot(df_polar, df_glucose):
 
 # === Hauptfunktion ===
 def main():
-    st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="💓", layout="wide")
-
+    st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="💜", layout="wide")
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
+
     st.title("Biofeedback Dashboard – Polar & CGM")
     st.markdown(f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>", unsafe_allow_html=True)
 
@@ -129,81 +129,86 @@ def main():
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
-    # === Werte ===
     hr = metrics.get("avg_hr_60s", 0)
     delta_hr = metrics.get("delta_hr", 0)
     hrv = metrics.get("avg_rmssd_60s", 0)
     delta_hrv = metrics.get("delta_rmssd", 0)
     gl = metrics.get("latest_glucose", 0)
 
-    # === HTML-Design (Lila-Blau-Stil) ===
+    # === LILA-BLAUER STIL (final version) ===
     html = f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
     .metric-container {{
         display: flex;
         justify-content: space-between;
-        gap: 24px;
+        gap: 26px;
         margin-bottom: 30px;
     }}
     .metric-card {{
         flex: 1;
-        border-radius: 22px;
+        border-radius: 20px;
         padding: 28px;
         color: white;
-        position: relative;
         font-family: 'Poppins', sans-serif;
-        background: linear-gradient(135deg, #7F5AF0, #6246EA, #4A3FCB);
+        background: linear-gradient(160deg, #8B5CF6 0%, #6366F1 60%, #4F46E5 100%);
         box-shadow: 0 6px 20px rgba(0,0,0,0.25);
-        transition: all 0.3s ease;
+        transition: all 0.4s ease;
+        animation: fadeIn 0.8s ease-in-out;
+        position: relative;
     }}
     .metric-card:hover {{
-        transform: translateY(-2px);
+        transform: translateY(-3px);
         box-shadow: 0 10px 25px rgba(0,0,0,0.35);
+    }}
+    @keyframes fadeIn {{
+        from {{ opacity: 0; transform: translateY(5px); }}
+        to {{ opacity: 1; transform: translateY(0); }}
     }}
     .metric-title {{
         font-size: 13px;
         letter-spacing: 1px;
-        opacity: 0.9;
+        opacity: 0.85;
         text-transform: uppercase;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
     }}
     .metric-value {{
-        font-size: 52px;
+        font-size: 54px;
         font-weight: 700;
         margin: 0;
-        line-height: 1;
+        line-height: 1.1;
     }}
     .metric-unit {{
-        font-size: 18px;
-        opacity: 0.8;
+        font-size: 16px;
+        font-weight: 500;
+        opacity: 0.6;
+        margin-left: 6px;
         text-transform: uppercase;
-        margin-left: 4px;
     }}
     .metric-delta {{
         font-size: 15px;
+        margin-top: 12px;
         opacity: 0.85;
-        margin-top: 6px;
     }}
     .metric-interpret {{
         font-size: 14px;
         opacity: 0.8;
-        margin-top: 10px;
+        margin-top: 4px;
     }}
     .metric-icon {{
         position: absolute;
-        top: 18px;
+        top: 20px;
         right: 22px;
-        font-size: 28px;
-        background: rgba(255,255,255,0.1);
-        padding: 8px 10px;
-        border-radius: 12px;
+        font-size: 22px;
+        background: rgba(255,255,255,0.08);
+        padding: 6px 10px;
+        border-radius: 10px;
     }}
     .metric-live {{
         position: absolute;
         bottom: 14px;
-        left: 24px;
-        font-size: 14px;
+        left: 22px;
+        font-size: 13px;
         color: #9eff9e;
     }}
     </style>
@@ -212,33 +217,32 @@ def main():
         <div class="metric-card">
             <div class="metric-icon">❤️</div>
             <div class="metric-title">HERZFREQUENZ</div>
-            <div class="metric-value">{hr:.0f}<span class="metric-unit"> bpm</span></div>
+            <div class="metric-value">{hr:.0f}<span class="metric-unit">BPM</span></div>
             <div class="metric-delta">{'↗' if delta_hr > 0 else '↘' if delta_hr < 0 else '→'} {delta_hr:+.1f} bpm</div>
             <div class="metric-interpret">Herzaktivität aktuell</div>
-            <div class="metric-live">🟢 Live</div>
+            <div class="metric-live">● Live</div>
         </div>
 
         <div class="metric-card">
             <div class="metric-icon">💓</div>
             <div class="metric-title">HRV (RMSSD)</div>
-            <div class="metric-value">{hrv*1000:.0f}<span class="metric-unit"> ms</span></div>
+            <div class="metric-value">{hrv*1000:.0f}<span class="metric-unit">MS</span></div>
             <div class="metric-delta">{'↗' if delta_hrv > 0 else '↘' if delta_hrv < 0 else '→'} {delta_hrv:+.1f} ms</div>
             <div class="metric-interpret">Vagal-Tonus / Stresslevel</div>
-            <div class="metric-live">🟢 Live</div>
+            <div class="metric-live">● Live</div>
         </div>
 
         <div class="metric-card">
             <div class="metric-icon">🩸</div>
             <div class="metric-title">GLUKOSE</div>
-            <div class="metric-value">{gl:.0f}<span class="metric-unit"> mg/dL</span></div>
+            <div class="metric-value">{gl:.0f}<span class="metric-unit">MG/DL</span></div>
             <div class="metric-delta">↗ leicht steigend</div>
             <div class="metric-interpret">Blutzucker im Normbereich</div>
-            <div class="metric-live">🟢 Live</div>
+            <div class="metric-live">● Live</div>
         </div>
     </div>
     """
-
-    components.html(html, height=250)
+    components.html(html, height=260)
 
     # === Charts ===
     st.subheader(f"📈 Gesamtsignal – letzte {window_minutes} Minuten")
@@ -247,14 +251,14 @@ def main():
     else:
         st.info("Keine Daten im aktuellen Zeitraum verfügbar.")
 
-    st.subheader(f"❤️ Herzfrequenz – letzte {window_minutes} Minuten")
+    # Einzelplots
     if not df_polar.empty:
+        st.subheader(f"❤️ Herzfrequenz – letzte {window_minutes} Minuten")
         fig_hr = go.Figure()
         fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], mode="lines", line=dict(color="#e74c3c", width=2)))
         st.plotly_chart(fig_hr, use_container_width=True)
 
-    st.subheader(f"💓 HRV (RMSSD & SDNN) – letzte {window_minutes} Minuten")
-    if not df_polar.empty:
+        st.subheader(f"💓 HRV (RMSSD & SDNN) – letzte {window_minutes} Minuten")
         fig_hrv = go.Figure()
         if "hrv_rmssd" in df_polar.columns:
             fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000,
@@ -264,15 +268,16 @@ def main():
                                          mode="lines", line=dict(color="#5dade2", width=2)))
         st.plotly_chart(fig_hrv, use_container_width=True)
 
-    st.subheader(f"🩸 Glukose – letzte {window_minutes} Minuten")
     if not df_glucose.empty:
+        st.subheader(f"🩸 Glukose – letzte {window_minutes} Minuten")
         fig_gl = go.Figure()
         fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y", y0=70, y1=140,
                          fillcolor="rgba(46,204,113,0.2)", line=dict(width=0), layer="below")
-        fig_gl.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"], mode="lines+markers",
-                                    line=dict(color="#27ae60", width=2), marker=dict(size=4)))
+        fig_gl.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"],
+                                    mode="lines+markers", line=dict(color="#27ae60", width=2), marker=dict(size=4)))
         st.plotly_chart(fig_gl, use_container_width=True)
 
+    # Tabellen
     if not df_polar.empty:
         st.subheader("🕒 Letzte Polar-Messwerte")
         st.dataframe(df_polar.tail(10))
