@@ -72,27 +72,18 @@ def compute_metrics(df_polar: pd.DataFrame, df_glucose: pd.DataFrame, window_min
         # Heart rate means
         avg_hr_60s = recent_data["hr"].mean()
         avg_hr_long = long_window["hr"].mean()
-        delta_hr = None
-        if avg_hr_long and avg_hr_60s:
-            delta_hr = avg_hr_60s - avg_hr_long
+        delta_hr = avg_hr_60s - avg_hr_long if avg_hr_long and avg_hr_60s else None
 
         # HRV RMSSD means (in seconds, convert to ms)
         avg_rmssd_60s = recent_data["hrv_rmssd"].mean()
         avg_rmssd_long = long_window["hrv_rmssd"].mean()
-        delta_rmssd = None
-        if avg_rmssd_long and avg_rmssd_60s:
-            delta_rmssd = (avg_rmssd_60s - avg_rmssd_long) * 1000
+        delta_rmssd = (avg_rmssd_60s - avg_rmssd_long) * 1000 if avg_rmssd_long and avg_rmssd_60s else None
 
-        avg_sdnn_60s = None
-        avg_sdnn_long = None
-        if "hrv_sdnn" in df_polar.columns:
-            avg_sdnn_60s = recent_data["hrv_sdnn"].mean()
-            avg_sdnn_long = long_window["hrv_sdnn"].mean()
+        avg_sdnn_60s = recent_data["hrv_sdnn"].mean() if "hrv_sdnn" in df_polar.columns else None
+        avg_sdnn_long = long_window["hrv_sdnn"].mean() if "hrv_sdnn" in df_polar.columns else None
 
         # Latest glucose value
-        latest_glucose = None
-        if not df_glucose.empty and "sgv" in df_glucose.columns:
-            latest_glucose = df_glucose["sgv"].iloc[-1]
+        latest_glucose = df_glucose["sgv"].iloc[-1] if not df_glucose.empty and "sgv" in df_glucose.columns else None
 
         metrics.update(
             {
@@ -211,11 +202,41 @@ def main() -> None:
     else:
         st.info("Keine HRV-Daten verfügbar.")
 
+    # === CGM Plot (fixed range + target zone) ===
     st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
     if not df_glucose.empty and "sgv" in df_glucose.columns:
+        fig_glucose = go.Figure()
+        # Zielbereich 70–140 mg/dL
+        fig_glucose.add_shape(
+            type="rect",
+            xref="paper", x0=0, x1=1,
+            yref="y", y0=70, y1=140,
+            fillcolor="rgba(46, 204, 113, 0.2)",
+            line=dict(width=0),
+            layer="below"
+        )
+        # Glukosekurve
+        fig_glucose.add_trace(
+            go.Scatter(
+                x=df_glucose.index,
+                y=df_glucose["sgv"],
+                mode="lines+markers",
+                name="Glukose (mg/dL)",
+                line=dict(color="#e74c3c", width=2),
+                marker=dict(size=4)
+            )
+        )
+        fig_glucose.update_layout(
+            template="plotly_white",
+            height=300,
+            margin=dict(l=0, r=0, t=0, b=0),
+            xaxis=dict(title="Zeit"),
+            yaxis=dict(title="Glukose (mg/dL)", range=[40, 180], fixedrange=True),
+            showlegend=False,
+        )
         with st.container(border=True, height="stretch"):
-            st.line_chart(df_glucose[["sgv"]], height=300)
-            st.markdown("<small>Y-Achse fixiert auf 40–180 mg/dL</small>", unsafe_allow_html=True)
+            st.plotly_chart(fig_glucose, use_container_width=True)
+            st.markdown("<small>Y-Achse fixiert auf 40–180 mg/dL, Zielbereich 70–140 mg/dL (grün)</small>", unsafe_allow_html=True)
     else:
         st.info("Keine CGM-Daten verfügbar.")
 
