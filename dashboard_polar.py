@@ -1,13 +1,14 @@
 import os
 from datetime import datetime, timedelta
 import pandas as pd
+import numpy as np
 import pytz
 import streamlit as st
 import streamlit.components.v1 as components
 from pymongo import MongoClient
 import plotly.graph_objects as go
 
-# === Auto-Refresh (alle 2 Sekunden) ===
+# === Auto-Refresh alle 2 Sekunden ===
 try:
     from streamlit_autorefresh import st_autorefresh
 except ModuleNotFoundError:
@@ -26,19 +27,19 @@ def connect_to_mongo():
 
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
-    window_minutes = st.session_state.get("window_minutes", 15)
-    time_threshold = now - timedelta(minutes=window_minutes)
+
+    time_threshold_polar = now - timedelta(minutes=5)
+    time_threshold_glucose = now - timedelta(minutes=15)
 
     # Polar-Daten
-    polar_data = list(col_polar.find({"timestamp": {"$gte": time_threshold.isoformat()}}).sort("timestamp", 1))
+    polar_data = list(col_polar.find({"timestamp": {"$gte": time_threshold_polar.isoformat()}}).sort("timestamp", 1))
     df_polar = pd.DataFrame(polar_data)
     if not df_polar.empty:
         df_polar["timestamp"] = pd.to_datetime(df_polar["timestamp"], errors="coerce")
         df_polar = df_polar.set_index("timestamp").sort_index()
 
     # Glukose-Daten
-    time_threshold_utc = (now - timedelta(minutes=window_minutes)).astimezone(pytz.UTC)
-    glucose_data = list(col_glucose.find({"dateString": {"$gte": time_threshold_utc.isoformat()}}).sort("dateString", 1))
+    glucose_data = list(col_glucose.find({"dateString": {"$gte": time_threshold_glucose.isoformat()}}).sort("dateString", 1))
     df_glucose = pd.DataFrame(glucose_data)
     if not df_glucose.empty:
         df_glucose["timestamp"] = pd.to_datetime(df_glucose["dateString"], errors="coerce", utc=True)
@@ -49,29 +50,54 @@ def connect_to_mongo():
 
 
 # === Kennzahlenberechnung ===
-def compute_metrics(df_polar, df_glucose, window_minutes):
+def compute_metrics(df_polar, df_glucose):
     metrics = {}
+
     if not df_polar.empty:
-        recent_data = df_polar.last("60s")
-        long_window = df_polar.last(f"{window_minutes}min")
+        # Herzfrequenz (aktuell & Trend)
+        hr = df_polar["hr"].iloc[-1]
+        hr_mean = df_polar["hr"].mean()
+        delta_hr = hr - hr_mean
 
-        avg_hr_60s = recent_data["hr"].mean()
-        avg_hr_long = long_window["hr"].mean()
-        delta_hr = avg_hr_60s - avg_hr_long if avg_hr_long and avg_hr_60s else None
+        # HRV Metriken
+        if "hrv_rmssd" in df_polar.columns:
+            rmssd = df_polar["hrv_rmssd"].iloc[-1] * 1000
+            rmssd_mean = df_polar["hrv_rmssd"].mean() * 1000
+        else:
+            rmssd = rmssd_mean = np.nan
 
-        avg_rmssd_60s = recent_data["hrv_rmssd"].mean()
-        avg_rmssd_long = long_window["hrv_rmssd"].mean()
-        delta_rmssd = (avg_rmssd_60s - avg_rmssd_long) * 1000 if avg_rmssd_long and avg_rmssd_60s else None
+        if "hrv_sdnn" in df_polar.columns:
+            sdnn = df_polar["hrv_sdnn"].iloc[-1] * 1000
+            sdnn_mean = df_polar["hrv_sdnn"].mean() * 1000
+        else:
+            sdnn = sdnn_mean = np.nan
 
-        latest_glucose = df_glucose["sgv"].iloc[-1] if not df_glucose.empty else None
+        # HRV Variationskoeffizient (CV%)
+        cv_hrv = (sdnn_mean / rmssd_mean * 100) if rmssd_mean and sdnn_mean else np.nan
 
         metrics.update({
-            "avg_hr_60s": avg_hr_60s,
+            "hr": hr,
+            "hr_mean": hr_mean,
             "delta_hr": delta_hr,
-            "avg_rmssd_60s": avg_rmssd_60s,
-            "delta_rmssd": delta_rmssd,
-            "latest_glucose": latest_glucose
+            "rmssd": rmssd,
+            "sdnn": sdnn,
+            "cv_hrv": cv_hrv
         })
+
+    if not df_glucose.empty:
+        gl_now = df_glucose["sgv"].iloc[-1]
+        gl_15min = df_glucose["sgv"].iloc[0]
+        delta_gl = gl_now - gl_15min
+        gl_mean = df_glucose["sgv"].mean()
+        gl_cv = (df_glucose["sgv"].std() / gl_mean * 100) if gl_mean else np.nan
+
+        metrics.update({
+            "gl_now": gl_now,
+            "delta_gl": delta_gl,
+            "gl_mean": gl_mean,
+            "gl_cv": gl_cv
+        })
+
     return metrics
 
 
@@ -87,16 +113,17 @@ def create_combined_plot(df_polar, df_glucose):
         fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], name="HR (bpm)",
                                  mode="lines", line=dict(color="#e74c3c", width=2)))
     if "hrv_rmssd" in df_polar.columns:
-        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000, name="HRV RMSSD (ms)",
+        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000, name="HRV RMSSD (ms)",
                                  mode="lines", yaxis="y2", line=dict(color="#2980b9", width=2)))
     if "hrv_sdnn" in df_polar.columns:
-        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"]*1000, name="HRV SDNN (ms)",
+        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"] * 1000, name="HRV SDNN (ms)",
                                  mode="lines", yaxis="y2", line=dict(color="#5dade2", width=2)))
     if not df_glucose.empty:
         fig.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"], name="Glukose (mg/dL)",
                                  mode="lines", yaxis="y3", line=dict(color="#27ae60", width=3)))
 
-    fig.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y3", y0=70, y1=140,
+    fig.add_shape(type="rect", xref="paper", x0=0, x1=1,
+                  yref="y3", y0=70, y1=140,
                   fillcolor="rgba(46,204,113,0.15)", line=dict(width=0), layer="below")
 
     fig.update_layout(template="plotly_white", height=450,
@@ -112,123 +139,74 @@ def create_combined_plot(df_polar, df_glucose):
 # === Hauptfunktion ===
 def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="💜", layout="wide")
-
     if st_autorefresh:
-        st_autorefresh(interval=2000, key="live_refresh")
+        st_autorefresh(interval=2000, key="refresh")
 
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
-    st.title("Biofeedback Dashboard – Polar & CGM")
-    st.markdown(f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>", unsafe_allow_html=True)
 
-    st.sidebar.header("⚙️ Einstellungen")
-    window_minutes = st.sidebar.slider("Zeitfenster (Minuten)", 5, 60, 15)
-    st.session_state["window_minutes"] = window_minutes
+    st.title("Biofeedback Dashboard – Polar & CGM")
+    st.markdown(f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')}</div>", unsafe_allow_html=True)
 
     df_polar, df_glucose = connect_to_mongo()
-    metrics = compute_metrics(df_polar, df_glucose, window_minutes)
+    metrics = compute_metrics(df_polar, df_glucose)
 
-    hr = metrics.get("avg_hr_60s", 0)
+    hr = metrics.get("hr", 0)
     delta_hr = metrics.get("delta_hr", 0)
-    hrv = metrics.get("avg_rmssd_60s", 0)
-    delta_hrv = metrics.get("delta_rmssd", 0)
-    gl = metrics.get("latest_glucose", 0)
+    hrv = metrics.get("rmssd", 0)
+    gl = metrics.get("gl_now", 0)
 
-    # === Obere Live-Karten ===
+    # === Live Cards (HR, HRV, Glukose) ===
     components.html(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
     .metric-container {{
-        display: flex;
-        justify-content: space-between;
-        gap: 26px;
-        margin-bottom: 30px;
+        display: flex; justify-content: space-between; gap: 26px; margin-bottom: 30px;
     }}
     .metric-card {{
-        flex: 1;
-        border-radius: 20px;
-        padding: 28px;
-        color: white;
+        flex: 1; border-radius: 20px; padding: 28px; color: white;
         font-family: 'Poppins', sans-serif;
         background: linear-gradient(160deg, #8B5CF6 0%, #6366F1 60%, #4F46E5 100%);
-        box-shadow: 0 6px 20px rgba(0,0,0,0.25);
-        position: relative;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.25); position: relative;
     }}
-    .metric-title {{ font-size: 13px; letter-spacing: 1px; opacity: 0.85; text-transform: uppercase; margin-bottom: 8px; }}
-    .metric-value {{ font-size: 54px; font-weight: 700; margin: 0; line-height: 1.1; }}
-    .metric-unit {{ font-size: 16px; font-weight: 500; opacity: 0.6; margin-left: 6px; }}
-    .metric-delta {{ font-size: 15px; margin-top: 12px; opacity: 0.85; }}
-    .metric-interpret {{ font-size: 14px; opacity: 0.8; margin-top: 4px; }}
-    .metric-icon {{ position: absolute; top: 20px; right: 22px; font-size: 22px; opacity: 0.9; }}
-    .pulse {{ width: 8px; height: 8px; background-color: #00ff6a; border-radius: 50%; animation: pulse 1.5s infinite; box-shadow: 0 0 5px #00ff6a; display: inline-block; }}
-    @keyframes pulse {{ 0% {{opacity:0.4;transform:scale(0.9);}} 50% {{opacity:1;transform:scale(1.3);}} 100% {{opacity:0.4;transform:scale(0.9);}} }}
+    .pulse {{ width: 8px; height: 8px; background:#00ff6a; border-radius:50%;
+        animation:pulse 1.5s infinite; box-shadow:0 0 5px #00ff6a; display:inline-block; }}
+    @keyframes pulse {{0%{{opacity:.4;transform:scale(.9);}}50%{{opacity:1;transform:scale(1.3);}}100%{{opacity:.4;transform:scale(.9);}}}}
     </style>
-
     <div class="metric-container">
-        <div class="metric-card">
-            <div class="metric-icon">❤️</div>
-            <div class="metric-title">HERZFREQUENZ</div>
-            <div class="metric-value">{hr:.0f}<span class="metric-unit">BPM</span></div>
-            <div class="metric-delta">{'↗' if delta_hr > 0 else '↘' if delta_hr < 0 else '→'} {delta_hr:+.1f} bpm</div>
-            <div class="metric-interpret">Herzaktivität aktuell</div>
-            <div style="position:absolute;bottom:14px;left:22px;font-size:13px;color:#9eff9e;"><span class="pulse"></span> Live</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-icon">💓</div>
-            <div class="metric-title">HRV (RMSSD)</div>
-            <div class="metric-value">{hrv*1000:.0f}<span class="metric-unit">MS</span></div>
-            <div class="metric-delta">{'↗' if delta_hrv > 0 else '↘' if delta_hrv < 0 else '→'} {delta_hrv:+.1f} ms</div>
-            <div class="metric-interpret">Vagal-Tonus / Stresslevel</div>
-            <div style="position:absolute;bottom:14px;left:22px;font-size:13px;color:#9eff9e;"><span class="pulse"></span> Live</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-icon">🩸</div>
-            <div class="metric-title">GLUKOSE</div>
-            <div class="metric-value">{gl:.0f}<span class="metric-unit">MG/DL</span></div>
-            <div class="metric-delta">↗ leicht steigend</div>
-            <div class="metric-interpret">Blutzucker im Normbereich</div>
-            <div style="position:absolute;bottom:14px;left:22px;font-size:13px;color:#9eff9e;"><span class="pulse"></span> Live</div>
-        </div>
+        <div class="metric-card"><div style="font-size:20px;">❤️</div><h4>HR</h4><h1>{hr:.0f}</h1><p>{'↗' if delta_hr>0 else '↘' if delta_hr<0 else '→'} {delta_hr:+.1f} bpm</p><div><span class="pulse"></span> Live</div></div>
+        <div class="metric-card"><div style="font-size:20px;">💓</div><h4>HRV (RMSSD)</h4><h1>{hrv:.0f}</h1><p>ms</p><div><span class="pulse"></span> Live</div></div>
+        <div class="metric-card"><div style="font-size:20px;">🩸</div><h4>Glukose</h4><h1>{gl:.0f}</h1><p>mg/dL</p><div><span class="pulse"></span> Live</div></div>
     </div>
     """, height=270)
 
-    # === Erweiterbare KPI-Bereiche ===
-    st.markdown("## 🧩 Erweiterte physiologische Kennzahlen")
+    # === Erweiterte KPI-Tabelle ===
+    st.markdown("## 📊 Erweiterte physiologische Kennzahlen (gleitende Analyse)")
+    data = []
 
-    with st.expander("🧠 Autonomes Nervensystem (HRV)"):
-        st.table(pd.DataFrame({
-            "KPI": ["RMSSD", "SDNN", "LF/HF Ratio"],
-            "Wert": ["72 ms", "95 ms", "1.6"],
-            "Interpretation": ["Parasympathische Aktivität", "Gesamt-HRV", "Sympathikus/Parasympathikus Balance"]
-        }))
+    if not df_polar.empty:
+        data += [
+            ["Autonomes NS", "RMSSD", f"{metrics.get('rmssd', np.nan):.1f} ms", "5 min", "Parasympathische Aktivität"],
+            ["Autonomes NS", "SDNN", f"{metrics.get('sdnn', np.nan):.1f} ms", "5 min", "Gesamt-HRV"],
+            ["Autonomes NS", "CV% HRV", f"{metrics.get('cv_hrv', np.nan):.1f} %", "5 min", "Variabilität"],
+            ["Kardiovaskulär", "HR Mittelwert", f"{metrics.get('hr_mean', np.nan):.1f} bpm", "5 min", "Herzaktivität"],
+        ]
 
-    with st.expander("❤️ Kardiovaskuläre Dynamik"):
-        st.table(pd.DataFrame({
-            "KPI": ["Durchschn. HR (5 min)", "CV% HRV", "RSA (Atmungskopplung)"],
-            "Wert": ["68 bpm", "12%", "85 ms"],
-            "Interpretation": ["Herzaktivität", "HRV-Stabilität", "Atmungsgekoppelte HRV"]
-        }))
+    if not df_glucose.empty:
+        data += [
+            ["Glukose", "Δ Glukose", f"{metrics.get('delta_gl', np.nan):+.1f} mg/dL", "15 min", "Trend"],
+            ["Glukose", "Mittelwert", f"{metrics.get('gl_mean', np.nan):.1f} mg/dL", "15 min", "Kurzzeitniveau"],
+            ["Glukose", "CV%", f"{metrics.get('gl_cv', np.nan):.1f} %", "15 min", "Stabilität"],
+        ]
 
-    with st.expander("🩸 Glukose-Metabolismus"):
-        st.table(pd.DataFrame({
-            "KPI": ["Δ Glukose (15 min)", "Mittelwert (30 min)", "Variabilität (CV%)"],
-            "Wert": ["+8 mg/dL", "101 mg/dL", "9%"],
-            "Interpretation": ["Postprandiale Phase", "Kurzzeitniveau", "Stabilität"]
-        }))
+    df_kpi = pd.DataFrame(data, columns=["Kategorie", "KPI", "Wert", "Fenster", "Interpretation"])
+    with st.expander("📊 Erweiterte physiologische Kennzahlen anzeigen"):
+        st.table(df_kpi)
 
-    with st.expander("⏱ Kontextuelle Marker"):
-        st.table(pd.DataFrame({
-            "KPI": ["Zeit seit Mahlzeit", "Zeit seit Stressereignis"],
-            "Wert": ["78 min", "120 min"],
-            "Interpretation": ["Verdauungsphase", "Erholungsstatus"]
-        }))
-
-    # === Charts & Tabellen (wie bisher) ===
-    st.subheader(f"📈 Gesamtsignal – letzte {window_minutes} Minuten")
+    # === Charts ===
+    st.subheader("📈 Gesamtsignal")
     if not df_polar.empty or not df_glucose.empty:
         st.plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
-    else:
-        st.info("Keine Daten im aktuellen Zeitraum verfügbar.")
 
     if not df_polar.empty:
         st.subheader("❤️ Herzfrequenz (HR)")
@@ -247,12 +225,14 @@ def main():
     if not df_glucose.empty:
         st.subheader("🩸 Glukose (CGM)")
         fig_gl = go.Figure()
-        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y", y0=70, y1=140,
+        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1,
+                         yref="y", y0=70, y1=140,
                          fillcolor="rgba(46,204,113,0.2)", line=dict(width=0), layer="below")
         fig_gl.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"],
                                     mode="lines+markers", line=dict(color="#27ae60", width=2), marker=dict(size=4)))
         st.plotly_chart(fig_gl, use_container_width=True)
 
+    # === Tabellen ===
     if not df_polar.empty:
         st.subheader("🕒 Letzte Polar-Messwerte")
         st.dataframe(df_polar.tail(10))
