@@ -1,9 +1,9 @@
 import os
 from datetime import datetime, timedelta
-
 import pandas as pd
 import pytz
 import streamlit as st
+import streamlit.components.v1 as components
 from pymongo import MongoClient
 
 # Plotly sicherstellen
@@ -14,7 +14,7 @@ except ModuleNotFoundError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "plotly"])
     import plotly.graph_objects as go
 
-# Auto-Refresh für Live-Daten
+# Auto-Refresh
 try:
     from streamlit_autorefresh import st_autorefresh
 except ModuleNotFoundError:
@@ -23,10 +23,8 @@ except ModuleNotFoundError:
 
 # === Datenbank-Verbindung ===
 def connect_to_mongo():
-    """Stellt Verbindung zu MongoDB her und gibt Polar- & Glukose-Datenframes zurück."""
     MONGO_URI = os.getenv("MONGO_URI") or \
         "mongodb+srv://cocuzzam:MCETH2025@nightscout-db.21jfrwe.mongodb.net/?retryWrites=true&w=majority"
-
     client = MongoClient(MONGO_URI)
     db_polar = client["nightscout-db"]
     db_glucose = client["nightscout"]
@@ -39,14 +37,12 @@ def connect_to_mongo():
     window_minutes = st.session_state.get("window_minutes", 15)
     time_threshold = now - timedelta(minutes=window_minutes)
 
-    # Polar-Daten
     polar_data = list(col_polar.find({"timestamp": {"$gte": time_threshold.isoformat()}}).sort("timestamp", 1))
     df_polar = pd.DataFrame(polar_data)
     if not df_polar.empty:
         df_polar["timestamp"] = pd.to_datetime(df_polar["timestamp"], errors="coerce")
         df_polar = df_polar.set_index("timestamp").sort_index()
 
-    # Glukose-Daten
     time_threshold_utc = (now - timedelta(minutes=window_minutes)).astimezone(pytz.UTC)
     glucose_data = list(col_glucose.find({"dateString": {"$gte": time_threshold_utc.isoformat()}}).sort("dateString", 1))
     df_glucose = pd.DataFrame(glucose_data)
@@ -54,13 +50,11 @@ def connect_to_mongo():
         df_glucose["timestamp"] = pd.to_datetime(df_glucose["dateString"], errors="coerce", utc=True)
         df_glucose["timestamp"] = df_glucose["timestamp"].dt.tz_convert("Europe/Zurich")
         df_glucose = df_glucose.set_index("timestamp").sort_index()
-
     return df_polar, df_glucose
 
 
 # === Kennzahlenberechnung ===
 def compute_metrics(df_polar, df_glucose, window_minutes):
-    """Berechnet Durchschnittswerte & Deltas."""
     metrics = {}
     if not df_polar.empty:
         recent_data = df_polar.last("60s")
@@ -88,53 +82,32 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
 
 # === Kombinierter Plot ===
 def create_combined_plot(df_polar, df_glucose):
-    """Erstellt kombinierten Plot für HR, HRV & Glukose."""
     fig = go.Figure()
-
     y_min, y_max = (40, 180)
     if not df_glucose.empty:
-        g_min = df_glucose["sgv"].min()
-        g_max = df_glucose["sgv"].max()
-        padding = 10
-        y_min = max(40, g_min - padding)
-        y_max = min(250, g_max + padding)
+        g_min, g_max = df_glucose["sgv"].min(), df_glucose["sgv"].max()
+        y_min, y_max = max(40, g_min - 10), min(250, g_max + 10)
 
     if "hr" in df_polar.columns:
-        fig.add_trace(go.Scatter(
-            x=df_polar.index, y=df_polar["hr"], name="Herzfrequenz (bpm)",
-            mode="lines", line=dict(color="#e74c3c", width=2)
-        ))
+        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], name="HR (bpm)",
+                                 mode="lines", line=dict(color="#e74c3c", width=2)))
     if "hrv_rmssd" in df_polar.columns:
-        fig.add_trace(go.Scatter(
-            x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000, name="HRV RMSSD (ms)",
-            mode="lines", yaxis="y2", line=dict(color="#2980b9", width=2)
-        ))
-    if "hrv_sdnn" in df_polar.columns:
-        fig.add_trace(go.Scatter(
-            x=df_polar.index, y=df_polar["hrv_sdnn"] * 1000, name="HRV SDNN (ms)",
-            mode="lines", yaxis="y2", line=dict(color="#5dade2", width=2)
-        ))
+        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000, name="HRV RMSSD (ms)",
+                                 mode="lines", yaxis="y2", line=dict(color="#2980b9", width=2)))
     if not df_glucose.empty:
-        fig.add_trace(go.Scatter(
-            x=df_glucose.index, y=df_glucose["sgv"], name="Glukose (mg/dL)",
-            mode="lines", yaxis="y3", line=dict(color="#27ae60", width=3, shape="spline")
-        ))
+        fig.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"], name="Glukose (mg/dL)",
+                                 mode="lines", yaxis="y3", line=dict(color="#27ae60", width=3)))
 
-    fig.add_shape(type="rect", xref="paper", x0=0, x1=1,
-                  yref="y3", y0=70, y1=140,
-                  fillcolor="rgba(46, 204, 113, 0.15)", line=dict(width=0), layer="below")
+    fig.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y3", y0=70, y1=140,
+                  fillcolor="rgba(46,204,113,0.15)", line=dict(width=0), layer="below")
 
-    fig.update_layout(
-        template="plotly_white",
-        height=450,
-        margin=dict(l=0, r=0, t=0, b=0),
-        xaxis=dict(title="Zeit"),
-        yaxis=dict(title="HR (bpm)"),
-        yaxis2=dict(title="HRV (ms)", overlaying="y", side="right", position=0.9, showgrid=False),
-        yaxis3=dict(title="Glukose (mg/dL)", overlaying="y", side="right", position=1.0, showgrid=False,
-                    range=[y_min, y_max]),
-        legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5)
-    )
+    fig.update_layout(template="plotly_white", height=450,
+                      margin=dict(l=0, r=0, t=0, b=0),
+                      xaxis=dict(title="Zeit"),
+                      yaxis=dict(title="HR (bpm)"),
+                      yaxis2=dict(title="HRV (ms)", overlaying="y", side="right", showgrid=False),
+                      yaxis3=dict(title="Glukose (mg/dL)", overlaying="y", side="right", showgrid=False, range=[y_min, y_max]),
+                      legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5))
     return fig
 
 
@@ -148,40 +121,37 @@ def main():
     st.markdown(f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>", unsafe_allow_html=True)
 
     st.sidebar.header("⚙️ Einstellungen")
-    window_minutes = st.sidebar.slider("Zeitfenster (in Minuten)", 5, 60, 15)
+    window_minutes = st.sidebar.slider("Zeitfenster (Minuten)", 5, 60, 15)
     st.session_state["window_minutes"] = window_minutes
 
     if st_autorefresh:
-        st_autorefresh(interval=3000, key="datarefresh")
+        st_autorefresh(interval=4000, key="refresh")
 
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
-    # === STYLE ===
-    st.markdown("""
-        <style>
-        .metric-container { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 25px; }
-        .metric-card { flex: 1; border-radius: 20px; padding: 24px 28px; color: white; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-        .metric-title { font-size: 16px; letter-spacing: 0.5px; opacity: 0.9; margin-bottom: 8px; }
-        .metric-value { font-size: 48px; font-weight: 700; margin: 0; }
-        .metric-unit { font-size: 18px; margin-left: 4px; opacity: 0.85; }
-        .metric-delta { font-size: 16px; margin-top: 6px; opacity: 0.8; }
-        .metric-interpret { font-size: 14px; opacity: 0.75; margin-top: 8px; }
-        .metric-icon { position: absolute; top: 18px; right: 22px; font-size: 28px; opacity: 0.9; }
-        .metric-live { position: absolute; bottom: 12px; left: 24px; font-size: 14px; color: #9eff9e; }
-        </style>
-    """, unsafe_allow_html=True)
-
-    # === LIVE-KARTEN ===
+    # === HTML-Karten ===
     hr = metrics.get("avg_hr_60s", 0)
     delta_hr = metrics.get("delta_hr", 0)
     hrv = metrics.get("avg_rmssd_60s", 0)
     delta_hrv = metrics.get("delta_rmssd", 0)
     gl = metrics.get("latest_glucose", 0)
 
-    cards_html = f"""
-    <div class="metric-container">
+    html = f"""
+    <style>
+    .metric-container {{display: flex; justify-content: space-between; gap: 20px; margin-bottom: 25px;}}
+    .metric-card {{flex: 1; border-radius: 20px; padding: 24px 28px; color: white; position: relative;
+                   box-shadow: 0 4px 20px rgba(0,0,0,0.15);}}
+    .metric-title {{font-size: 16px; opacity: 0.9; margin-bottom: 8px;}}
+    .metric-value {{font-size: 48px; font-weight: 700; margin: 0;}}
+    .metric-unit {{font-size: 18px; margin-left: 4px; opacity: 0.85;}}
+    .metric-delta {{font-size: 16px; margin-top: 6px; opacity: 0.8;}}
+    .metric-interpret {{font-size: 14px; opacity: 0.75; margin-top: 8px;}}
+    .metric-icon {{position: absolute; top: 18px; right: 22px; font-size: 28px; opacity: 0.9;}}
+    .metric-live {{position: absolute; bottom: 12px; left: 24px; font-size: 14px; color: #9eff9e;}}
+    </style>
 
+    <div class="metric-container">
         <div class="metric-card" style="background: linear-gradient(135deg, #e96443, #904e95);">
             <div class="metric-icon">❤️</div>
             <div class="metric-title">HERZFREQUENZ</div>
@@ -208,26 +178,22 @@ def main():
             <div class="metric-interpret">Blutzucker im Normbereich</div>
             <div class="metric-live">🟢 Live</div>
         </div>
-
     </div>
     """
 
-    st.markdown(cards_html, unsafe_allow_html=True)
+    components.html(html, height=220)
 
-    # === GESAMTPLOT ===
+    # === Charts ===
     st.subheader(f"📈 Gesamtsignal – letzte {window_minutes} Minuten")
     if not df_polar.empty or not df_glucose.empty:
         st.plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
     else:
         st.info("Keine Daten im aktuellen Zeitraum verfügbar.")
 
-    # === EINZELCHARTS ===
     st.subheader(f"❤️ Herzfrequenz – letzte {window_minutes} Minuten")
     if not df_polar.empty:
         fig_hr = go.Figure()
-        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], mode="lines",
-                                    line=dict(color="#e74c3c", width=2)))
-        fig_hr.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
+        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], mode="lines", line=dict(color="#e74c3c", width=2)))
         st.plotly_chart(fig_hr, use_container_width=True)
 
     st.subheader(f"💓 HRV (RMSSD & SDNN) – letzte {window_minutes} Minuten")
@@ -239,23 +205,17 @@ def main():
         if "hrv_sdnn" in df_polar.columns:
             fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"]*1000,
                                          mode="lines", line=dict(color="#5dade2", width=2)))
-        fig_hrv.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
         st.plotly_chart(fig_hrv, use_container_width=True)
 
-    st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
+    st.subheader(f"🩸 Glukose – letzte {window_minutes} Minuten")
     if not df_glucose.empty:
         fig_gl = go.Figure()
-        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1,
-                         yref="y", y0=70, y1=140,
+        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y", y0=70, y1=140,
                          fillcolor="rgba(46,204,113,0.2)", line=dict(width=0), layer="below")
-        fig_gl.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"],
-                                    mode="lines+markers",
-                                    line=dict(color="#27ae60", width=2),
-                                    marker=dict(size=4)))
-        fig_gl.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
+        fig_gl.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"], mode="lines+markers",
+                                    line=dict(color="#27ae60", width=2), marker=dict(size=4)))
         st.plotly_chart(fig_gl, use_container_width=True)
 
-    # === TABELLEN ===
     if not df_polar.empty:
         st.subheader("🕒 Letzte Polar-Messwerte")
         st.dataframe(df_polar.tail(10))
