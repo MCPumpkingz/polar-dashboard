@@ -219,7 +219,7 @@ def create_state_timeline(df_polar: pd.DataFrame) -> go.Figure:
 
 
 def main() -> None:
-    """Run the Streamlit app with a layout inspired by the Seattle Weather demo."""
+    """Run the Streamlit app."""
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="💓", layout="wide")
 
     tz = pytz.timezone("Europe/Zurich")
@@ -237,6 +237,7 @@ def main() -> None:
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
+    # === Summary metrics ===
     with st.container(horizontal=True, gap="medium"):
         cols = st.columns(3, gap="medium")
         # HR
@@ -255,31 +256,18 @@ def main() -> None:
         # Glucose + Trend
         with cols[2]:
             glucose_value = metrics.get("latest_glucose")
-            if not df_glucose.empty and "delta" in df_glucose.columns:
-                glucose_delta = df_glucose["delta"].iloc[-1]
-            else:
-                glucose_delta = None
-            if not df_glucose.empty and "direction" in df_glucose.columns:
-                glucose_direction = df_glucose["direction"].iloc[-1]
-            else:
-                glucose_direction = None
+            glucose_delta = df_glucose["delta"].iloc[-1] if not df_glucose.empty and "delta" in df_glucose.columns else None
+            glucose_direction = df_glucose["direction"].iloc[-1] if not df_glucose.empty and "direction" in df_glucose.columns else None
 
             if glucose_value is not None:
-                arrow = "➡️"
-                if glucose_direction == "DoubleUp": arrow = "⬆️⬆️"
-                elif glucose_direction == "SingleUp": arrow = "⬆️"
-                elif glucose_direction == "FortyFiveUp": arrow = "↗️"
-                elif glucose_direction == "Flat": arrow = "➡️"
-                elif glucose_direction == "FortyFiveDown": arrow = "↘️"
-                elif glucose_direction == "SingleDown": arrow = "⬇️"
-                elif glucose_direction == "DoubleDown": arrow = "⬇️⬇️"
-
+                arrow = {"DoubleUp": "⬆️⬆️", "SingleUp": "⬆️", "FortyFiveUp": "↗️",
+                         "Flat": "➡️", "FortyFiveDown": "↘️", "SingleDown": "⬇️", "DoubleDown": "⬇️⬇️"}.get(glucose_direction, "➡️")
                 delta_str = f"{glucose_delta:+.1f} mg/dL/min" if glucose_delta else None
                 st.metric(f"🩸 Glukose {arrow}", f"{glucose_value:.0f} mg/dL", delta_str)
             else:
                 st.metric("🩸 Glukose", "–", None)
 
-    # Neuro state & recommendation
+    # === Neurophysiologischer Zustand ===
     state, state_desc, recommendation, state_color = (
         metrics.get("state"),
         metrics.get("state_desc"),
@@ -298,17 +286,46 @@ def main() -> None:
     else:
         st.warning("Warte auf ausreichende HRV-Daten …")
 
+    # === Combined signal ===
     st.subheader(f"📈 Gesamtsignal – letzte {window_minutes} Minuten")
     if not df_polar.empty or not df_glucose.empty:
         st.container(border=True, height="stretch").plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
     else:
         st.info("Keine Daten im aktuellen Zeitraum verfügbar.")
 
+    # === Einzelcharts ===
+    st.subheader(f"❤️ Herzfrequenz (HR) – letzte {window_minutes} Minuten")
+    if not df_polar.empty and "hr" in df_polar.columns:
+        st.container(border=True, height="stretch").line_chart(df_polar[["hr"]])
+    else:
+        st.info("Keine Herzfrequenzdaten verfügbar.")
+
+    st.subheader(f"💓 HRV-Parameter (RMSSD & SDNN) – letzte {window_minutes} Minuten")
+    if not df_polar.empty and any(col in df_polar.columns for col in ["hrv_rmssd", "hrv_sdnn"]):
+        cols_to_plot = [c for c in ["hrv_rmssd", "hrv_sdnn"] if c in df_polar.columns]
+        st.container(border=True, height="stretch").line_chart(df_polar[cols_to_plot])
+    else:
+        st.info("Keine HRV-Daten verfügbar.")
+
     st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
     if not df_glucose.empty and "sgv" in df_glucose.columns:
         st.container(border=True, height="stretch").line_chart(df_glucose[["sgv"]])
     else:
         st.info("Keine CGM-Daten verfügbar.")
+
+    # === Neurophysiologischer Verlauf ===
+    st.subheader(f"🧠 Neurophysiologischer Zustand (Verlauf) – letzte {window_minutes} Minuten")
+    if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
+        st.container(border=True, height="stretch").plotly_chart(create_state_timeline(df_polar), use_container_width=True)
+    else:
+        st.info("Keine ausreichenden HRV-Daten zur Bestimmung des Zustandes.")
+
+    # === Data tables ===
+    if not df_polar.empty:
+        st.subheader("🕒 Letzte Polar-Messwerte")
+        st.container(border=True, height="stretch").dataframe(df_polar.tail(10))
+    else:
+        st.info("Keine Polar-Messwerte verfügbar.")
 
     if not df_glucose.empty:
         st.subheader("🕒 Letzte CGM-Messwerte")
