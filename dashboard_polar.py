@@ -5,21 +5,7 @@ import pytz
 import streamlit as st
 import streamlit.components.v1 as components
 from pymongo import MongoClient
-
-# === Plotly sicherstellen ===
-try:
-    import plotly.graph_objects as go
-except ModuleNotFoundError:
-    import subprocess, sys
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "plotly"])
-    import plotly.graph_objects as go
-
-# === Auto-Refresh ===
-try:
-    from streamlit_autorefresh import st_autorefresh
-except ModuleNotFoundError:
-    st_autorefresh = None
-
+import plotly.graph_objects as go
 
 # === MongoDB Verbindung ===
 def connect_to_mongo():
@@ -113,19 +99,18 @@ def create_combined_plot(df_polar, df_glucose):
 # === Hauptfunktion ===
 def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="💜", layout="wide")
+
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
-
     st.title("Biofeedback Dashboard – Polar & CGM")
-    st.markdown(f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align:right;color:#777;'>🕒 Letztes Update: {now.strftime('%H:%M:%S')} (CET)</div>",
+                unsafe_allow_html=True)
 
     st.sidebar.header("⚙️ Einstellungen")
     window_minutes = st.sidebar.slider("Zeitfenster (Minuten)", 5, 60, 15)
     st.session_state["window_minutes"] = window_minutes
 
-    if st_autorefresh:
-        st_autorefresh(interval=4000, key="refresh")
-
+    # ❌ Kein automatischer Seiten-Refresh mehr
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
@@ -135,7 +120,7 @@ def main():
     delta_hrv = metrics.get("delta_rmssd", 0)
     gl = metrics.get("latest_glucose", 0)
 
-    # === LILA-BLAUER STIL (final version) ===
+    # === STIL mit pulsierendem Live-Indikator ===
     html = f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
@@ -154,16 +139,11 @@ def main():
         background: linear-gradient(160deg, #8B5CF6 0%, #6366F1 60%, #4F46E5 100%);
         box-shadow: 0 6px 20px rgba(0,0,0,0.25);
         transition: all 0.4s ease;
-        animation: fadeIn 0.8s ease-in-out;
         position: relative;
     }}
     .metric-card:hover {{
         transform: translateY(-3px);
         box-shadow: 0 10px 25px rgba(0,0,0,0.35);
-    }}
-    @keyframes fadeIn {{
-        from {{ opacity: 0; transform: translateY(5px); }}
-        to {{ opacity: 1; transform: translateY(0); }}
     }}
     .metric-title {{
         font-size: 13px;
@@ -209,7 +189,23 @@ def main():
         bottom: 14px;
         left: 22px;
         font-size: 13px;
-        color: #9eff9e;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #b5f5b5;
+    }}
+    .pulse {{
+        width: 8px;
+        height: 8px;
+        background-color: #00ff6a;
+        border-radius: 50%;
+        animation: pulse 1.5s infinite;
+        box-shadow: 0 0 5px #00ff6a;
+    }}
+    @keyframes pulse {{
+        0% {{ opacity: 0.4; transform: scale(0.9); }}
+        50% {{ opacity: 1; transform: scale(1.3); }}
+        100% {{ opacity: 0.4; transform: scale(0.9); }}
     }}
     </style>
 
@@ -220,7 +216,7 @@ def main():
             <div class="metric-value">{hr:.0f}<span class="metric-unit">BPM</span></div>
             <div class="metric-delta">{'↗' if delta_hr > 0 else '↘' if delta_hr < 0 else '→'} {delta_hr:+.1f} bpm</div>
             <div class="metric-interpret">Herzaktivität aktuell</div>
-            <div class="metric-live">● Live</div>
+            <div class="metric-live"><div class="pulse"></div>Live</div>
         </div>
 
         <div class="metric-card">
@@ -229,7 +225,7 @@ def main():
             <div class="metric-value">{hrv*1000:.0f}<span class="metric-unit">MS</span></div>
             <div class="metric-delta">{'↗' if delta_hrv > 0 else '↘' if delta_hrv < 0 else '→'} {delta_hrv:+.1f} ms</div>
             <div class="metric-interpret">Vagal-Tonus / Stresslevel</div>
-            <div class="metric-live">● Live</div>
+            <div class="metric-live"><div class="pulse"></div>Live</div>
         </div>
 
         <div class="metric-card">
@@ -238,7 +234,7 @@ def main():
             <div class="metric-value">{gl:.0f}<span class="metric-unit">MG/DL</span></div>
             <div class="metric-delta">↗ leicht steigend</div>
             <div class="metric-interpret">Blutzucker im Normbereich</div>
-            <div class="metric-live">● Live</div>
+            <div class="metric-live"><div class="pulse"></div>Live</div>
         </div>
     </div>
     """
@@ -250,40 +246,6 @@ def main():
         st.plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
     else:
         st.info("Keine Daten im aktuellen Zeitraum verfügbar.")
-
-    # Einzelplots
-    if not df_polar.empty:
-        st.subheader(f"❤️ Herzfrequenz – letzte {window_minutes} Minuten")
-        fig_hr = go.Figure()
-        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], mode="lines", line=dict(color="#e74c3c", width=2)))
-        st.plotly_chart(fig_hr, use_container_width=True)
-
-        st.subheader(f"💓 HRV (RMSSD & SDNN) – letzte {window_minutes} Minuten")
-        fig_hrv = go.Figure()
-        if "hrv_rmssd" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000,
-                                         mode="lines", line=dict(color="#2980b9", width=2)))
-        if "hrv_sdnn" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"]*1000,
-                                         mode="lines", line=dict(color="#5dade2", width=2)))
-        st.plotly_chart(fig_hrv, use_container_width=True)
-
-    if not df_glucose.empty:
-        st.subheader(f"🩸 Glukose – letzte {window_minutes} Minuten")
-        fig_gl = go.Figure()
-        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y", y0=70, y1=140,
-                         fillcolor="rgba(46,204,113,0.2)", line=dict(width=0), layer="below")
-        fig_gl.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"],
-                                    mode="lines+markers", line=dict(color="#27ae60", width=2), marker=dict(size=4)))
-        st.plotly_chart(fig_gl, use_container_width=True)
-
-    # Tabellen
-    if not df_polar.empty:
-        st.subheader("🕒 Letzte Polar-Messwerte")
-        st.dataframe(df_polar.tail(10))
-    if not df_glucose.empty:
-        st.subheader("🕒 Letzte CGM-Messwerte")
-        st.dataframe(df_glucose.tail(10))
 
 
 if __name__ == "__main__":
