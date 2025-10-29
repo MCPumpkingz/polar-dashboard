@@ -104,18 +104,18 @@ def create_combined_plot(df_polar, df_glucose):
             mode="lines", line=dict(color="#e74c3c", width=2)
         ))
 
-    # HRV RMSSD (blau)
+    # HRV RMSSD (blau, in ms)
     if "hrv_rmssd" in df_polar.columns:
         fig.add_trace(go.Scatter(
             x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000, name="HRV RMSSD (ms)",
             mode="lines", yaxis="y2", line=dict(color="#2980b9", width=2)
         ))
 
-    # HRV SDNN (hellblau)
+    # HRV SDNN (hellblau, ebenfalls in ms)
     if "hrv_sdnn" in df_polar.columns:
         fig.add_trace(go.Scatter(
-            x=df_polar.index, y=df_polar["hrv_sdnn"], name="HRV SDNN (ms)",
-            mode="lines", yaxis="y2", line=dict(color="#5dade2", width=2, dash="dot")
+            x=df_polar.index, y=df_polar["hrv_sdnn"] * 1000, name="HRV SDNN (ms)",
+            mode="lines", yaxis="y2", line=dict(color="#5dade2", width=2)
         ))
 
     # Glukose (grün)
@@ -204,15 +204,18 @@ def main():
     if not df_polar.empty:
         fig_hrv = go.Figure()
         if "hrv_rmssd" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"],
-                                         mode="lines", line=dict(color="#2980b9", width=2), name="HRV RMSSD"))
+            fig_hrv.add_trace(go.Scatter(
+                x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000,
+                mode="lines", line=dict(color="#2980b9", width=2), name="HRV RMSSD (ms)"
+            ))
         if "hrv_sdnn" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"],
-                                         mode="lines", line=dict(color="#5dade2", width=2, dash="dot"),
-                                         name="HRV SDNN"))
+            fig_hrv.add_trace(go.Scatter(
+                x=df_polar.index, y=df_polar["hrv_sdnn"] * 1000,
+                mode="lines", line=dict(color="#5dade2", width=2), name="HRV SDNN (ms)"
+            ))
         fig_hrv.update_layout(template="plotly_white", height=300, margin=dict(l=0, r=0, t=0, b=0),
                               xaxis=dict(title="Zeit", range=[df_polar.index.min(), df_polar.index.max()]),
-                              yaxis=dict(title="HRV (s)"))
+                              yaxis=dict(title="HRV (ms)"))
         st.container(border=True).plotly_chart(fig_hrv, use_container_width=True)
 
     st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
