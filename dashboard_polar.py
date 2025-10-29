@@ -221,6 +221,20 @@ def main() -> None:
         st.info("Keine Daten im aktuellen Zeitraum verfügbar.")
 
     # === Einzelcharts ===
+    st.subheader(f"❤️ Herzfrequenz (HR) – letzte {window_minutes} Minuten")
+    if not df_polar.empty and "hr" in df_polar.columns:
+        st.container(border=True, height="stretch").line_chart(df_polar[["hr"]])
+    else:
+        st.info("Keine Herzfrequenzdaten verfügbar.")
+
+    st.subheader(f"💓 HRV-Parameter (RMSSD & SDNN) – letzte {window_minutes} Minuten")
+    if not df_polar.empty and any(col in df_polar.columns for col in ["hrv_rmssd", "hrv_sdnn"]):
+        cols_to_plot = [c for c in ["hrv_rmssd", "hrv_sdnn"] if c in df_polar.columns]
+        st.container(border=True, height="stretch").line_chart(df_polar[cols_to_plot])
+    else:
+        st.info("Keine HRV-Daten verfügbar.")
+
+    # === CGM Plot (auto-scaled + target zone) ===
     st.subheader(f"🩸 Glukose (CGM) – letzte {window_minutes} Minuten")
     if not df_glucose.empty and "sgv" in df_glucose.columns:
         min_val = df_glucose["sgv"].min()
