@@ -240,13 +240,19 @@ def main():
         arrow = "↗" if value > 0 else ("↘" if value < 0 else "→")
         return f"{arrow} {value:+.1f} {unit}"
 
+    hr_display = f"{hr:.0f}" if hr else "–"
+    delta_hr_display = format_delta(delta_hr, "bpm")
+    hrv_display = f"{(hrv * 1000):.0f}" if hrv else "–"
+    delta_hrv_display = format_delta(delta_hrv, "ms")
+    gl_display = f"{gl:.0f}" if gl else "–"
+
     st.markdown(f"""
     <div class="metric-container">
         <div class="metric-card" style="background: linear-gradient(135deg, #e96443, #904e95);">
             <div class="metric-icon">❤️</div>
             <div class="metric-title">HERZFREQUENZ</div>
-            <div class="metric-value">{hr:.0f if hr else 0}<span class="metric-unit"> bpm</span></div>
-            <div class="metric-delta">{format_delta(delta_hr, "bpm")}</div>
+            <div class="metric-value">{hr_display}<span class="metric-unit"> bpm</span></div>
+            <div class="metric-delta">{delta_hr_display}</div>
             <div class="metric-interpret">Herzaktivität aktuell</div>
             <div class="metric-live">🟢 Live</div>
         </div>
@@ -254,8 +260,8 @@ def main():
         <div class="metric-card" style="background: linear-gradient(135deg, #2980b9, #6dd5fa);">
             <div class="metric-icon">💓</div>
             <div class="metric-title">HRV (RMSSD)</div>
-            <div class="metric-value">{(hrv*1000):.0f if hrv else 0}<span class="metric-unit"> ms</span></div>
-            <div class="metric-delta">{format_delta(delta_hrv, "ms")}</div>
+            <div class="metric-value">{hrv_display}<span class="metric-unit"> ms</span></div>
+            <div class="metric-delta">{delta_hrv_display}</div>
             <div class="metric-interpret">Vagal-Tonus / Stresslevel</div>
             <div class="metric-live">🟢 Live</div>
         </div>
@@ -263,7 +269,7 @@ def main():
         <div class="metric-card" style="background: linear-gradient(135deg, #00b09b, #96c93d);">
             <div class="metric-icon">🩸</div>
             <div class="metric-title">GLUKOSE</div>
-            <div class="metric-value">{gl:.0f if gl else 0}<span class="metric-unit"> mg/dL</span></div>
+            <div class="metric-value">{gl_display}<span class="metric-unit"> mg/dL</span></div>
             <div class="metric-delta">↗ leicht steigend</div>
             <div class="metric-interpret">Blutzucker im Normbereich</div>
             <div class="metric-live">🟢 Live</div>
