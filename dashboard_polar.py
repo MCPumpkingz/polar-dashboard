@@ -126,7 +126,7 @@ def safe_format(value, decimals=0):
         return "–"
 
 
-# === Combined Plot (without green zone) ===
+# === Combined Plot (fixed layout) ===
 def create_combined_plot(df_polar, df_glucose):
     fig = go.Figure()
 
@@ -153,19 +153,41 @@ def create_combined_plot(df_polar, df_glucose):
             mode="lines", line=dict(color="#27ae60", width=3), yaxis="y3"
         ))
 
-    # Layout clean (no green fill)
+    # Layout — corrected (no titlefont!)
     fig.update_layout(
         template="plotly_dark",
         height=460,
         margin=dict(l=60, r=90, t=40, b=60),
         xaxis=dict(title="Time"),
-        yaxis=dict(title="Heart Rate (bpm)", tickfont=dict(color="#e74c3c"), titlefont=dict(color="#e74c3c")),
-        yaxis2=dict(title="HRV (ms)", overlaying="y", side="right",
-                    tickfont=dict(color="#2980b9"), titlefont=dict(color="#2980b9"), position=0.93, showgrid=False),
-        yaxis3=dict(title="Glucose (mg/dL)", overlaying="y", side="right",
-                    tickfont=dict(color="#27ae60"), titlefont=dict(color="#27ae60"),
-                    position=1.0, range=[y_min, y_max], showgrid=False),
-        legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5)
+        yaxis=dict(
+            title=dict(text="Heart Rate (bpm)", font=dict(color="#e74c3c")),
+            tickfont=dict(color="#e74c3c"),
+            position=0.0
+        ),
+        yaxis2=dict(
+            title=dict(text="HRV (ms)", font=dict(color="#2980b9")),
+            tickfont=dict(color="#2980b9"),
+            overlaying="y",
+            side="right",
+            position=0.93,
+            showgrid=False
+        ),
+        yaxis3=dict(
+            title=dict(text="Glucose (mg/dL)", font=dict(color="#27ae60")),
+            tickfont=dict(color="#27ae60"),
+            overlaying="y",
+            side="right",
+            position=1.0,
+            range=[y_min, y_max],
+            showgrid=False
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.25,
+            xanchor="center",
+            x=0.5
+        )
     )
     return fig
 
