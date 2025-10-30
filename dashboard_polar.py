@@ -48,54 +48,41 @@ def connect_to_mongo():
     return df_polar, df_glucose
 
 
-# === Metrics (robust for small windows) ===
+# === Metrics ===
 def compute_metrics(df_polar, df_glucose, window_minutes):
     metrics = {}
     if not df_polar.empty:
-        # last() returns a time-slice by string like "60s"
         try:
             recent_data = df_polar.last("60s")
         except Exception:
             recent_data = df_polar.tail(1)
-
         try:
             long_window = df_polar.last(f"{window_minutes}min")
         except Exception:
             long_window = df_polar
 
-        # HR
         avg_hr_60s = recent_data["hr"].mean() if "hr" in df_polar.columns and not recent_data.empty else None
         avg_hr_long = long_window["hr"].mean() if "hr" in df_polar.columns and not long_window.empty else None
         delta_hr = (avg_hr_60s - avg_hr_long) if (avg_hr_60s is not None and avg_hr_long is not None) else None
 
-        # HRV (RMSSD in seconds in DB -> convert to ms when displaying)
         avg_rmssd_60s = recent_data["hrv_rmssd"].mean() if "hrv_rmssd" in df_polar.columns and not recent_data.empty else None
         avg_rmssd_long = long_window["hrv_rmssd"].mean() if "hrv_rmssd" in df_polar.columns and not long_window.empty else None
         delta_rmssd = ((avg_rmssd_60s - avg_rmssd_long) * 1000) if (
             avg_rmssd_60s is not None and avg_rmssd_long is not None
         ) else None
 
-        # Glucose latest & trend if available (Nightscout often provides "delta")
         latest_glucose = df_glucose["sgv"].iloc[-1] if not df_glucose.empty and "sgv" in df_glucose.columns else None
         glucose_delta = df_glucose["delta"].iloc[-1] if not df_glucose.empty and "delta" in df_glucose.columns else None
+
+        # Prevent unrealistic glucose deltas
+        if glucose_delta is not None and abs(glucose_delta) > 10:
+            glucose_delta = 0
 
         metrics.update({
             "avg_hr_60s": avg_hr_60s,
             "delta_hr": delta_hr,
             "avg_rmssd_60s": avg_rmssd_60s,
             "delta_rmssd": delta_rmssd,
-            "latest_glucose": latest_glucose,
-            "glucose_delta": glucose_delta
-        })
-    else:
-        # still compute glucose-only metrics if HR/HRV empty
-        latest_glucose = df_glucose["sgv"].iloc[-1] if not df_glucose.empty and "sgv" in df_glucose.columns else None
-        glucose_delta = df_glucose["delta"].iloc[-1] if not df_glucose.empty and "delta" in df_glucose.columns else None
-        metrics.update({
-            "avg_hr_60s": None,
-            "delta_hr": None,
-            "avg_rmssd_60s": None,
-            "delta_rmssd": None,
             "latest_glucose": latest_glucose,
             "glucose_delta": glucose_delta
         })
@@ -113,121 +100,68 @@ def safe_format(value, decimals=0):
         return "–"
 
 
-# === Combined Plot (dark theme, de-overlapped y-axes) ===
+# === Combined Plot ===
 def create_combined_plot(df_polar, df_glucose):
     fig = go.Figure()
-
-    # Glucose y-range with guardrails
     y_min, y_max = (40, 180)
     if not df_glucose.empty and "sgv" in df_glucose.columns:
         g_min, g_max = df_glucose["sgv"].min(), df_glucose["sgv"].max()
         y_min, y_max = max(40, g_min - 10), min(250, g_max + 10)
 
-    # HR (left)
     if not df_polar.empty and "hr" in df_polar.columns:
         fig.add_trace(go.Scatter(
-            x=df_polar.index, y=df_polar["hr"],
-            name="Heart Rate (bpm)",
-            mode="lines",
-            line=dict(color="#e74c3c", width=2),
-            yaxis="y"
+            x=df_polar.index, y=df_polar["hr"], name="Heart Rate (bpm)",
+            mode="lines", line=dict(color="#e74c3c", width=2), yaxis="y"
         ))
-
-    # HRV RMSSD (right middle)
     if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
         fig.add_trace(go.Scatter(
-            x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000,
-            name="HRV RMSSD (ms)",
-            mode="lines",
-            line=dict(color="#2980b9", width=2),
-            yaxis="y2"
+            x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000, name="HRV RMSSD (ms)",
+            mode="lines", line=dict(color="#2980b9", width=2), yaxis="y2"
         ))
-
-    # HRV SDNN (right middle)
-    if not df_polar.empty and "hrv_sdnn" in df_polar.columns:
-        fig.add_trace(go.Scatter(
-            x=df_polar.index, y=df_polar["hrv_sdnn"] * 1000,
-            name="HRV SDNN (ms)",
-            mode="lines",
-            line=dict(color="#5dade2", width=2, dash="dot"),
-            yaxis="y2"
-        ))
-
-    # Glucose (right outer)
     if not df_glucose.empty and "sgv" in df_glucose.columns:
         fig.add_trace(go.Scatter(
-            x=df_glucose.index, y=df_glucose["sgv"],
-            name="Glucose (mg/dL)",
-            mode="lines",
-            line=dict(color="#27ae60", width=3),
-            yaxis="y3"
+            x=df_glucose.index, y=df_glucose["sgv"], name="Glucose (mg/dL)",
+            mode="lines", line=dict(color="#27ae60", width=3), yaxis="y3"
         ))
 
-    # Normal glucose band
-    fig.add_shape(
-        type="rect", xref="paper", x0=0, x1=1,
-        yref="y3", y0=70, y1=140,
-        fillcolor="rgba(46,204,113,0.15)", line=dict(width=0), layer="below"
-    )
+    fig.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y3",
+                  y0=70, y1=140, fillcolor="rgba(46,204,113,0.15)", line=dict(width=0), layer="below")
 
-    # Layout: neutral/technical dark
     fig.update_layout(
         template="plotly_dark",
         height=460,
         margin=dict(l=60, r=90, t=40, b=60),
         xaxis=dict(title="Time"),
-        yaxis=dict(
-            title=dict(text="Heart Rate (bpm)", font=dict(color="#e74c3c")),
-            tickfont=dict(color="#e74c3c"),
-            position=0.0
-        ),
-        yaxis2=dict(
-            title=dict(text="HRV (ms)", font=dict(color="#2980b9")),
-            tickfont=dict(color="#2980b9"),
-            overlaying="y",
-            side="right",
-            position=0.93,   # separate from glucose axis
-            showgrid=False
-        ),
-        yaxis3=dict(
-            title=dict(text="Glucose (mg/dL)", font=dict(color="#27ae60")),
-            tickfont=dict(color="#27ae60"),
-            overlaying="y",
-            side="right",
-            position=1.0,
-            range=[y_min, y_max],
-            showgrid=False
-        ),
+        yaxis=dict(title=dict(text="Heart Rate (bpm)", font=dict(color="#e74c3c")),
+                   tickfont=dict(color="#e74c3c"), position=0.0),
+        yaxis2=dict(title=dict(text="HRV (ms)", font=dict(color="#2980b9")),
+                    tickfont=dict(color="#2980b9"), overlaying="y", side="right",
+                    position=0.93, showgrid=False),
+        yaxis3=dict(title=dict(text="Glucose (mg/dL)", font=dict(color="#27ae60")),
+                    tickfont=dict(color="#27ae60"), overlaying="y", side="right",
+                    position=1.0, range=[y_min, y_max], showgrid=False),
         legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5)
     )
-
     return fig
 
 
-# === App ===
+# === Main App ===
 def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="🧪", layout="wide")
 
-    # Gentle auto-refresh
     if st_autorefresh:
         st_autorefresh(interval=2000, key="live_refresh")
 
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
-
-    # Top bar
     st.title("Biofeedback Dashboard – Polar & CGM")
-    st.markdown(
-        f"<div style='text-align:right;color:#AAA;'>Last Update: {now.strftime('%H:%M:%S')} (local)</div>",
-        unsafe_allow_html=True
-    )
+    st.markdown(f"<div style='text-align:right;color:#AAA;'>Last Update: {now.strftime('%H:%M:%S')} (local)</div>",
+                unsafe_allow_html=True)
 
-    # Controls
     st.sidebar.header("Settings")
     window_minutes = st.sidebar.slider("Window (minutes)", 5, 60, 15)
     st.session_state["window_minutes"] = window_minutes
 
-    # Data
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
@@ -238,84 +172,40 @@ def main():
     gl = metrics.get("latest_glucose")
     gl_delta = metrics.get("glucose_delta")
 
-    # === Metric Cards (neutral dark + colored accent bars) ===
-    # Only facts, no descriptive sentences above Live indicator.
-    # Each card has a subtle colored left accent bar (red/blue/green).
+    # === Metric Cards ===
     html = f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-    body {{ background-color: #0f1115; }}
     .metric-container {{
-        display: flex;
-        justify-content: space-between;
-        gap: 18px;
-        margin-bottom: 24px;
-        font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        display: flex; justify-content: space-between; gap: 18px; margin-bottom: 24px;
+        font-family: 'Inter', system-ui, sans-serif;
     }}
     .metric-card {{
-        flex: 1;
-        position: relative;
-        background: #161a22;
-        border-radius: 14px;
-        padding: 18px 20px 18px 22px;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.04);
-        color: #EAECEF;
-        overflow: hidden;
+        flex: 1; position: relative; background: #161a22; border-radius: 14px;
+        padding: 20px 22px 26px 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.04);
+        color: #EAECEF; overflow: hidden;
     }}
-    .accent-red::before {{
-        content: "";
-        position: absolute;
-        left: 0; top: 0; bottom: 0;
-        width: 6px; border-radius: 14px 0 0 14px;
-        background: #e74c3c;
-        box-shadow: 0 0 12px rgba(231,76,60,0.35);
+    .accent-red::before, .accent-blue::before, .accent-green::before {{
+        content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; border-radius: 14px 0 0 14px;
     }}
-    .accent-blue::before {{
-        content: "";
-        position: absolute;
-        left: 0; top: 0; bottom: 0;
-        width: 6px; border-radius: 14px 0 0 14px;
-        background: #2980b9;
-        box-shadow: 0 0 12px rgba(41,128,185,0.35);
+    .accent-red::before {{ background: #e74c3c; box-shadow: 0 0 12px rgba(231,76,60,0.35); }}
+    .accent-blue::before {{ background: #2980b9; box-shadow: 0 0 12px rgba(41,128,185,0.35); }}
+    .accent-green::before {{ background: #27ae60; box-shadow: 0 0 12px rgba(39,174,96,0.35); }}
+    .metric-header {{ display: flex; align-items: center; gap: 8px; font-size: 12px;
+        letter-spacing: .08em; text-transform: uppercase; color: #AAB2C0; margin-bottom: 8px;
     }}
-    .accent-green::before {{
-        content: "";
-        position: absolute;
-        left: 0; top: 0; bottom: 0;
-        width: 6px; border-radius: 14px 0 0 14px;
-        background: #27ae60;
-        box-shadow: 0 0 12px rgba(39,174,96,0.35);
+    .metric-icon {{ font-size: 16px; }}
+    .metric-value {{ display: flex; align-items: baseline; gap: 8px; font-size: 40px;
+        font-weight: 700; color: #F3F4F6; margin: 2px 0 0 0;
     }}
-    .metric-header {{
-        display: flex; align-items: center; gap: 10px;
-        font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #AAB2C0;
-        margin-bottom: 4px;
-    }}
-    .metric-icon {{
-        font-size: 16px; opacity: .95;
-    }}
-    .metric-value {{
-        display: flex; align-items: baseline; gap: 8px;
-        font-size: 40px; font-weight: 700; color: #F3F4F6;
-        line-height: 1.1; margin: 2px 0 0 0;
-    }}
-    .metric-unit {{
-        font-size: 14px; color: #9AA3B2; font-weight: 600;
-        letter-spacing: .02em;
-    }}
-    .metric-delta {{
-        margin-top: 6px; font-size: 13px; color: #C8CDD6;
-    }}
+    .metric-unit {{ font-size: 14px; color: #9AA3B2; font-weight: 600; }}
+    .metric-delta {{ margin-top: 10px; font-size: 13px; color: #C8CDD6; }}
     .metric-live {{
-        position: absolute; bottom: 10px; left: 14px;
-        display: flex; align-items: center; gap: 8px;
+        position: absolute; top: 10px; right: 14px; display: flex; align-items: center; gap: 6px;
         font-size: 12px; color: #B7F7C4;
     }}
-    .pulse {{
-        width: 8px; height: 8px; border-radius: 50%;
-        background: #2ecc71; box-shadow: 0 0 6px #2ecc71;
-        animation: pulse 1.5s infinite;
-    }}
+    .pulse {{ width: 8px; height: 8px; border-radius: 50%; background: #2ecc71; box-shadow: 0 0 6px #2ecc71;
+        animation: pulse 1.5s infinite; }}
     @keyframes pulse {{
         0% {{ opacity: .4; transform: scale(.9); }}
         50% {{ opacity: 1; transform: scale(1.25); }}
@@ -324,28 +214,26 @@ def main():
     </style>
 
     <div class="metric-container">
-
         <div class="metric-card accent-red">
+            <div class="metric-live"><div class="pulse"></div>Live</div>
             <div class="metric-header"><span class="metric-icon">❤️</span><span>Heart Rate</span></div>
             <div class="metric-value">{safe_format(hr, 0)} <span class="metric-unit">bpm</span></div>
-            <div class="metric-delta">{'↑' if (delta_hr is not None and delta_hr > 0) else '↓' if (delta_hr is not None and delta_hr < 0) else '→'} {safe_format(delta_hr, 1)} vs mean({window_minutes}m)</div>
-            <div class="metric-live"><div class="pulse"></div>Live</div>
+            <div class="metric-delta">{'↑' if delta_hr and delta_hr > 0 else '↓' if delta_hr and delta_hr < 0 else '→'} {safe_format(delta_hr, 1)} vs mean({window_minutes}m)</div>
         </div>
 
         <div class="metric-card accent-blue">
+            <div class="metric-live"><div class="pulse"></div>Live</div>
             <div class="metric-header"><span class="metric-icon">💓</span><span>HRV (RMSSD)</span></div>
             <div class="metric-value">{safe_format((hrv*1000) if hrv is not None else None, 0)} <span class="metric-unit">ms</span></div>
-            <div class="metric-delta">{'↑' if (delta_hrv is not None and delta_hrv > 0) else '↓' if (delta_hrv is not None and delta_hrv < 0) else '→'} {safe_format(delta_hrv, 1)} vs mean({window_minutes}m)</div>
-            <div class="metric-live"><div class="pulse"></div>Live</div>
+            <div class="metric-delta">{'↑' if delta_hrv and delta_hrv > 0 else '↓' if delta_hrv and delta_hrv < 0 else '→'} {safe_format(delta_hrv, 1)} vs mean({window_minutes}m)</div>
         </div>
 
         <div class="metric-card accent-green">
+            <div class="metric-live"><div class="pulse"></div>Live</div>
             <div class="metric-header"><span class="metric-icon">🩸</span><span>Glucose</span></div>
             <div class="metric-value">{safe_format(gl, 0)} <span class="metric-unit">mg/dL</span></div>
-            <div class="metric-delta">{'↑' if (gl_delta is not None and gl_delta > 0) else '↓' if (gl_delta is not None and gl_delta < 0) else '→'} {safe_format(gl_delta, 1)} mg/dL/min</div>
-            <div class="metric-live"><div class="pulse"></div>Live</div>
+            <div class="metric-delta">{'↑' if gl_delta and gl_delta > 0 else '↓' if gl_delta and gl_delta < 0 else '→'} {safe_format(gl_delta, 1)} mg/dL/min</div>
         </div>
-
     </div>
     """
     components.html(html, height=230)
@@ -356,55 +244,6 @@ def main():
         st.plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
     else:
         st.info("No data in the current time window.")
-
-    # Individual charts
-    if not df_polar.empty:
-        st.subheader("Heart Rate (HR)")
-        fig_hr = go.Figure()
-        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"],
-                                    mode="lines", line=dict(color="#e74c3c", width=2),
-                                    name="HR (bpm)"))
-        fig_hr.update_layout(template="plotly_dark", margin=dict(l=0, r=0, t=10, b=0), height=300)
-        st.plotly_chart(fig_hr, use_container_width=True)
-
-        st.subheader("HRV (RMSSD & SDNN)")
-        fig_hrv = go.Figure()
-        if "hrv_rmssd" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000,
-                                         mode="lines", line=dict(color="#2980b9", width=2),
-                                         name="RMSSD (ms)"))
-        if "hrv_sdnn" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"]*1000,
-                                         mode="lines", line=dict(color="#5dade2", width=2, dash="dot"),
-                                         name="SDNN (ms)"))
-        fig_hrv.update_layout(template="plotly_dark", margin=dict(l=0, r=0, t=10, b=0), height=300)
-        st.plotly_chart(fig_hrv, use_container_width=True)
-
-    if not df_glucose.empty and "sgv" in df_glucose.columns:
-        st.subheader("Glucose (CGM)")
-        fig_gl = go.Figure()
-        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1,
-                         yref="y", y0=70, y1=140,
-                         fillcolor="rgba(46,204,113,0.18)", line=dict(width=0), layer="below")
-        fig_gl.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"],
-                                    mode="lines+markers",
-                                    line=dict(color="#27ae60", width=2),
-                                    marker=dict(size=4),
-                                    name="Glucose (mg/dL)"))
-        # Auto y-range similar to combined plot
-        g_min, g_max = df_glucose["sgv"].min(), df_glucose["sgv"].max()
-        y0, y1 = max(40, g_min - 10), min(250, g_max + 10)
-        fig_gl.update_layout(template="plotly_dark", margin=dict(l=0, r=0, t=10, b=0),
-                             height=300, yaxis=dict(range=[y0, y1]))
-        st.plotly_chart(fig_gl, use_container_width=True)
-
-    # Tables
-    if not df_polar.empty:
-        st.subheader("Recent Polar Samples")
-        st.dataframe(df_polar.tail(10))
-    if not df_glucose.empty:
-        st.subheader("Recent CGM Samples")
-        st.dataframe(df_glucose.tail(10))
 
 
 if __name__ == "__main__":
