@@ -74,7 +74,7 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
         latest_glucose = df_glucose["sgv"].iloc[-1] if not df_glucose.empty and "sgv" in df_glucose.columns else None
         glucose_delta = df_glucose["delta"].iloc[-1] if not df_glucose.empty and "delta" in df_glucose.columns else None
 
-        # Prevent unrealistic glucose deltas
+        # prevent unrealistic glucose deltas
         if glucose_delta is not None and abs(glucose_delta) > 10:
             glucose_delta = 0
 
@@ -244,6 +244,54 @@ def main():
         st.plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
     else:
         st.info("No data in the current time window.")
+
+    # Individual charts
+    if not df_polar.empty:
+        st.subheader("Heart Rate (HR)")
+        fig_hr = go.Figure()
+        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"],
+                                    mode="lines", line=dict(color="#e74c3c", width=2),
+                                    name="HR (bpm)"))
+        fig_hr.update_layout(template="plotly_dark", margin=dict(l=0, r=0, t=10, b=0), height=300)
+        st.plotly_chart(fig_hr, use_container_width=True)
+
+        st.subheader("HRV (RMSSD & SDNN)")
+        fig_hrv = go.Figure()
+        if "hrv_rmssd" in df_polar.columns:
+            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000,
+                                         mode="lines", line=dict(color="#2980b9", width=2),
+                                         name="RMSSD (ms)"))
+        if "hrv_sdnn" in df_polar.columns:
+            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"]*1000,
+                                         mode="lines", line=dict(color="#5dade2", width=2, dash="dot"),
+                                         name="SDNN (ms)"))
+        fig_hrv.update_layout(template="plotly_dark", margin=dict(l=0, r=0, t=10, b=0), height=300)
+        st.plotly_chart(fig_hrv, use_container_width=True)
+
+    if not df_glucose.empty and "sgv" in df_glucose.columns:
+        st.subheader("Glucose (CGM)")
+        fig_gl = go.Figure()
+        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1,
+                         yref="y", y0=70, y1=140,
+                         fillcolor="rgba(46,204,113,0.18)", line=dict(width=0), layer="below")
+        fig_gl.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"],
+                                    mode="lines+markers",
+                                    line=dict(color="#27ae60", width=2),
+                                    marker=dict(size=4),
+                                    name="Glucose (mg/dL)"))
+        g_min, g_max = df_glucose["sgv"].min(), df_glucose["sgv"].max()
+        y0, y1 = max(40, g_min - 10), min(250, g_max + 10)
+        fig_gl.update_layout(template="plotly_dark", margin=dict(l=0, r=0, t=10, b=0),
+                             height=300, yaxis=dict(range=[y0, y1]))
+        st.plotly_chart(fig_gl, use_container_width=True)
+
+    # Tables
+    if not df_polar.empty:
+        st.subheader("Recent Polar Samples")
+        st.dataframe(df_polar.tail(10))
+    if not df_glucose.empty:
+        st.subheader("Recent CGM Samples")
+        st.dataframe(df_glucose.tail(10))
 
 
 if __name__ == "__main__":
