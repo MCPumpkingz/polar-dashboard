@@ -48,9 +48,25 @@ def connect_to_mongo():
     return df_polar, df_glucose
 
 
+# === Direction Mapping ===
+def map_direction(direction):
+    mapping = {
+        "DoubleUp": ("⬆️⬆️", "rising fast"),
+        "SingleUp": ("⬆️", "rising"),
+        "FortyFiveUp": ("↗️", "rising slightly"),
+        "Flat": ("→", "stable"),
+        "FortyFiveDown": ("↘️", "falling slightly"),
+        "SingleDown": ("⬇️", "falling"),
+        "DoubleDown": ("⬇️⬇️", "falling fast")
+    }
+    return mapping.get(direction, ("→", "stable"))
+
+
 # === Metrics ===
 def compute_metrics(df_polar, df_glucose, window_minutes):
     metrics = {}
+
+    # Polar metrics
     if not df_polar.empty:
         try:
             recent_data = df_polar.last("60s")
@@ -71,21 +87,33 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
             avg_rmssd_60s is not None and avg_rmssd_long is not None
         ) else None
 
-        latest_glucose = df_glucose["sgv"].iloc[-1] if not df_glucose.empty and "sgv" in df_glucose.columns else None
-        glucose_delta = df_glucose["delta"].iloc[-1] if not df_glucose.empty and "delta" in df_glucose.columns else None
+    else:
+        avg_hr_60s = avg_hr_long = delta_hr = avg_rmssd_60s = avg_rmssd_long = delta_rmssd = None
 
-        # prevent unrealistic glucose deltas
-        if glucose_delta is not None and abs(glucose_delta) > 10:
-            glucose_delta = 0
+    # Glucose metrics
+    latest_glucose = None
+    glucose_delta = 0
+    direction = None
 
-        metrics.update({
-            "avg_hr_60s": avg_hr_60s,
-            "delta_hr": delta_hr,
-            "avg_rmssd_60s": avg_rmssd_60s,
-            "delta_rmssd": delta_rmssd,
-            "latest_glucose": latest_glucose,
-            "glucose_delta": glucose_delta
-        })
+    if not df_glucose.empty and "sgv" in df_glucose.columns:
+        latest_glucose = df_glucose["sgv"].iloc[-1]
+        if len(df_glucose) >= 2:
+            sgv_diff = df_glucose["sgv"].iloc[-1] - df_glucose["sgv"].iloc[-2]
+            time_diff = (df_glucose.index[-1] - df_glucose.index[-2]).total_seconds() / 60.0
+            if time_diff > 0:
+                glucose_delta = sgv_diff / time_diff
+        direction = df_glucose["direction"].iloc[-1] if "direction" in df_glucose.columns else None
+
+    metrics.update({
+        "avg_hr_60s": avg_hr_60s,
+        "delta_hr": delta_hr,
+        "avg_rmssd_60s": avg_rmssd_60s,
+        "delta_rmssd": delta_rmssd,
+        "latest_glucose": latest_glucose,
+        "glucose_delta": glucose_delta,
+        "glucose_direction": direction
+    })
+
     return metrics
 
 
@@ -124,9 +152,7 @@ def create_combined_plot(df_polar, df_glucose):
             mode="lines", line=dict(color="#27ae60", width=3), yaxis="y3"
         ))
 
-    fig.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y3",
-                  y0=70, y1=140, fillcolor="rgba(46,204,113,0.15)", line=dict(width=0), layer="below")
-
+    # Removed glucose green zone from combined plot
     fig.update_layout(
         template="plotly_dark",
         height=460,
@@ -171,6 +197,8 @@ def main():
     delta_hrv = metrics.get("delta_rmssd")
     gl = metrics.get("latest_glucose")
     gl_delta = metrics.get("glucose_delta")
+    gl_dir = metrics.get("glucose_direction")
+    arrow, trend_text = map_direction(gl_dir)
 
     # === Metric Cards ===
     html = f"""
@@ -232,7 +260,7 @@ def main():
             <div class="metric-live"><div class="pulse"></div>Live</div>
             <div class="metric-header"><span class="metric-icon">🩸</span><span>Glucose</span></div>
             <div class="metric-value">{safe_format(gl, 0)} <span class="metric-unit">mg/dL</span></div>
-            <div class="metric-delta">{'↑' if gl_delta and gl_delta > 0 else '↓' if gl_delta and gl_delta < 0 else '→'} {safe_format(gl_delta, 1)} mg/dL/min</div>
+            <div class="metric-delta">{arrow} {safe_format(gl_delta, 1)} mg/dL/min ({trend_text})</div>
         </div>
     </div>
     """
@@ -279,20 +307,4 @@ def main():
                                     line=dict(color="#27ae60", width=2),
                                     marker=dict(size=4),
                                     name="Glucose (mg/dL)"))
-        g_min, g_max = df_glucose["sgv"].min(), df_glucose["sgv"].max()
-        y0, y1 = max(40, g_min - 10), min(250, g_max + 10)
-        fig_gl.update_layout(template="plotly_dark", margin=dict(l=0, r=0, t=10, b=0),
-                             height=300, yaxis=dict(range=[y0, y1]))
-        st.plotly_chart(fig_gl, use_container_width=True)
-
-    # Tables
-    if not df_polar.empty:
-        st.subheader("Recent Polar Samples")
-        st.dataframe(df_polar.tail(10))
-    if not df_glucose.empty:
-        st.subheader("Recent CGM Samples")
-        st.dataframe(df_glucose.tail(10))
-
-
-if __name__ == "__main__":
-    main()
+        g_min,
