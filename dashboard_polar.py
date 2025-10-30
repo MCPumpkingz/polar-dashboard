@@ -55,13 +55,13 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
         recent_data = df_polar.last("60s")
         long_window = df_polar.last(f"{window_minutes}min")
 
-        avg_hr_60s = recent_data["hr"].mean()
-        avg_hr_long = long_window["hr"].mean()
-        delta_hr = avg_hr_60s - avg_hr_long if avg_hr_long and avg_hr_60s else None
+        avg_hr_60s = recent_data["hr"].mean() if "hr" in recent_data else None
+        avg_hr_long = long_window["hr"].mean() if "hr" in long_window else None
+        delta_hr = (avg_hr_60s - avg_hr_long) if (avg_hr_long and avg_hr_60s) else None
 
-        avg_rmssd_60s = recent_data["hrv_rmssd"].mean()
-        avg_rmssd_long = long_window["hrv_rmssd"].mean()
-        delta_rmssd = (avg_rmssd_60s - avg_rmssd_long) * 1000 if avg_rmssd_long and avg_rmssd_60s else None
+        avg_rmssd_60s = recent_data["hrv_rmssd"].mean() if "hrv_rmssd" in recent_data else None
+        avg_rmssd_long = long_window["hrv_rmssd"].mean() if "hrv_rmssd" in long_window else None
+        delta_rmssd = ((avg_rmssd_60s - avg_rmssd_long) * 1000) if (avg_rmssd_long and avg_rmssd_60s) else None
 
         latest_glucose = df_glucose["sgv"].iloc[-1] if not df_glucose.empty else None
 
@@ -75,37 +75,112 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
     return metrics
 
 
-# === Kombinierter Plot ===
+# === Sicheres Formatieren ===
+def safe_format(value, decimals=0):
+    """Verhindert TypeError bei None oder NaN."""
+    try:
+        if value is None or pd.isna(value):
+            return "–"
+        return f"{value:.{decimals}f}"
+    except Exception:
+        return "–"
+
+
+# === Kombinierter Plot (optimiert mit separaten Y-Achsen) ===
 def create_combined_plot(df_polar, df_glucose):
     fig = go.Figure()
+
+    # Dynamische y-Achsenbereiche
     y_min, y_max = (40, 180)
     if not df_glucose.empty:
         g_min, g_max = df_glucose["sgv"].min(), df_glucose["sgv"].max()
         y_min, y_max = max(40, g_min - 10), min(250, g_max + 10)
 
+    # Herzfrequenz (links)
     if "hr" in df_polar.columns:
-        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"], name="HR (bpm)",
-                                 mode="lines", line=dict(color="#e74c3c", width=2)))
+        fig.add_trace(go.Scatter(
+            x=df_polar.index, y=df_polar["hr"],
+            name="HR (bpm)",
+            mode="lines",
+            line=dict(color="#e74c3c", width=2),
+            yaxis="y"
+        ))
+
+    # HRV RMSSD (rechte Mittelachse)
     if "hrv_rmssd" in df_polar.columns:
-        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000, name="HRV RMSSD (ms)",
-                                 mode="lines", yaxis="y2", line=dict(color="#2980b9", width=2)))
+        fig.add_trace(go.Scatter(
+            x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000,
+            name="HRV RMSSD (ms)",
+            mode="lines",
+            line=dict(color="#2980b9", width=2),
+            yaxis="y2"
+        ))
+
+    # HRV SDNN (rechte Mittelachse)
     if "hrv_sdnn" in df_polar.columns:
-        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"]*1000, name="HRV SDNN (ms)",
-                                 mode="lines", yaxis="y2", line=dict(color="#5dade2", width=2)))
+        fig.add_trace(go.Scatter(
+            x=df_polar.index, y=df_polar["hrv_sdnn"] * 1000,
+            name="HRV SDNN (ms)",
+            mode="lines",
+            line=dict(color="#5dade2", width=2, dash="dot"),
+            yaxis="y2"
+        ))
+
+    # Glukose (rechte Außenachse)
     if not df_glucose.empty:
-        fig.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"], name="Glukose (mg/dL)",
-                                 mode="lines", yaxis="y3", line=dict(color="#27ae60", width=3)))
+        fig.add_trace(go.Scatter(
+            x=df_glucose.index, y=df_glucose["sgv"],
+            name="Glukose (mg/dL)",
+            mode="lines",
+            line=dict(color="#27ae60", width=3),
+            yaxis="y3"
+        ))
 
-    fig.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y3", y0=70, y1=140,
-                  fillcolor="rgba(46,204,113,0.15)", line=dict(width=0), layer="below")
+    # Bereich für Normalglukose markieren
+    fig.add_shape(type="rect", xref="paper", x0=0, x1=1, yref="y3",
+                  y0=70, y1=140, fillcolor="rgba(46,204,113,0.15)",
+                  line=dict(width=0), layer="below")
 
-    fig.update_layout(template="plotly_white", height=450,
-                      margin=dict(l=0, r=0, t=0, b=0),
-                      xaxis=dict(title="Zeit"),
-                      yaxis=dict(title="HR (bpm)"),
-                      yaxis2=dict(title="HRV (ms)", overlaying="y", side="right", showgrid=False),
-                      yaxis3=dict(title="Glukose (mg/dL)", overlaying="y", side="right", showgrid=False, range=[y_min, y_max]),
-                      legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5))
+    # Layout-Optimierung für bessere Lesbarkeit
+    fig.update_layout(
+        template="plotly_dark",
+        height=460,
+        margin=dict(l=60, r=90, t=40, b=60),
+        xaxis=dict(title="Zeit"),
+        yaxis=dict(
+            title="Herzfrequenz (bpm)",
+            titlefont=dict(color="#e74c3c"),
+            tickfont=dict(color="#e74c3c"),
+            position=0.0
+        ),
+        yaxis2=dict(
+            title="HRV (ms)",
+            titlefont=dict(color="#2980b9"),
+            tickfont=dict(color="#2980b9"),
+            overlaying="y",
+            side="right",
+            position=0.93,  # leicht nach innen verschoben
+            showgrid=False
+        ),
+        yaxis3=dict(
+            title="Glukose (mg/dL)",
+            titlefont=dict(color="#27ae60"),
+            tickfont=dict(color="#27ae60"),
+            overlaying="y",
+            side="right",
+            position=1.0,  # ganz außen
+            range=[y_min, y_max],
+            showgrid=False
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.2,
+            xanchor="center",
+            x=0.5
+        )
+    )
+
     return fig
 
 
@@ -131,11 +206,11 @@ def main():
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
-    hr = metrics.get("avg_hr_60s", 0)
-    delta_hr = metrics.get("delta_hr", 0)
-    hrv = metrics.get("avg_rmssd_60s", 0)
-    delta_hrv = metrics.get("delta_rmssd", 0)
-    gl = metrics.get("latest_glucose", 0)
+    hr = metrics.get("avg_hr_60s")
+    delta_hr = metrics.get("delta_hr")
+    hrv = metrics.get("avg_rmssd_60s")
+    delta_hrv = metrics.get("delta_rmssd")
+    gl = metrics.get("latest_glucose")
 
     # === Stil mit pulsierendem Live-Indikator ===
     html = f"""
@@ -225,8 +300,8 @@ def main():
         <div class="metric-card">
             <div class="metric-icon">❤️</div>
             <div class="metric-title">HERZFREQUENZ</div>
-            <div class="metric-value">{hr:.0f}<span class="metric-unit">BPM</span></div>
-            <div class="metric-delta">{'↗' if delta_hr > 0 else '↘' if delta_hr < 0 else '→'} {delta_hr:+.1f} bpm</div>
+            <div class="metric-value">{safe_format(hr, 0)}<span class="metric-unit">BPM</span></div>
+            <div class="metric-delta">{'↗' if delta_hr and delta_hr > 0 else '↘' if delta_hr and delta_hr < 0 else '→'} {safe_format(delta_hr, 1)} bpm</div>
             <div class="metric-interpret">Herzaktivität aktuell</div>
             <div class="metric-live"><div class="pulse"></div>Live</div>
         </div>
@@ -234,8 +309,8 @@ def main():
         <div class="metric-card">
             <div class="metric-icon">💓</div>
             <div class="metric-title">HRV (RMSSD)</div>
-            <div class="metric-value">{hrv*1000:.0f}<span class="metric-unit">MS</span></div>
-            <div class="metric-delta">{'↗' if delta_hrv > 0 else '↘' if delta_hrv < 0 else '→'} {delta_hrv:+.1f} ms</div>
+            <div class="metric-value">{safe_format(hrv * 1000 if hrv else None, 0)}<span class="metric-unit">MS</span></div>
+            <div class="metric-delta">{'↗' if delta_hrv and delta_hrv > 0 else '↘' if delta_hrv and delta_hrv < 0 else '→'} {safe_format(delta_hrv, 1)} ms</div>
             <div class="metric-interpret">Vagal-Tonus / Stresslevel</div>
             <div class="metric-live"><div class="pulse"></div>Live</div>
         </div>
@@ -243,7 +318,7 @@ def main():
         <div class="metric-card">
             <div class="metric-icon">🩸</div>
             <div class="metric-title">GLUKOSE</div>
-            <div class="metric-value">{gl:.0f}<span class="metric-unit">MG/DL</span></div>
+            <div class="metric-value">{safe_format(gl, 0)}<span class="metric-unit">MG/DL</span></div>
             <div class="metric-delta">↗ leicht steigend</div>
             <div class="metric-interpret">Blutzucker im Normbereich</div>
             <div class="metric-live"><div class="pulse"></div>Live</div>
@@ -259,7 +334,7 @@ def main():
     else:
         st.info("Keine Daten im aktuellen Zeitraum verfügbar.")
 
-    # Einzelcharts
+    # Einzelcharts & Tabellen
     if not df_polar.empty:
         st.subheader("❤️ Herzfrequenz (HR)")
         fig_hr = go.Figure()
@@ -287,7 +362,6 @@ def main():
                                     mode="lines+markers", line=dict(color="#27ae60", width=2), marker=dict(size=4)))
         st.plotly_chart(fig_gl, use_container_width=True)
 
-    # Tabellen
     if not df_polar.empty:
         st.subheader("🕒 Letzte Polar-Messwerte")
         st.dataframe(df_polar.tail(10))
