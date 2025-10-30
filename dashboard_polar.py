@@ -86,7 +86,7 @@ def safe_format(value, decimals=0):
         return "–"
 
 
-# === Kombinierter Plot (optimiert mit separaten Y-Achsen) ===
+# === Kombinierter Plot (korrigiert & optimiert) ===
 def create_combined_plot(df_polar, df_glucose):
     fig = go.Figure()
 
@@ -141,34 +141,31 @@ def create_combined_plot(df_polar, df_glucose):
                   y0=70, y1=140, fillcolor="rgba(46,204,113,0.15)",
                   line=dict(width=0), layer="below")
 
-    # Layout-Optimierung für bessere Lesbarkeit
+    # Layout-Optimierung (aktuelle Syntax)
     fig.update_layout(
         template="plotly_dark",
         height=460,
         margin=dict(l=60, r=90, t=40, b=60),
         xaxis=dict(title="Zeit"),
         yaxis=dict(
-            title="Herzfrequenz (bpm)",
-            titlefont=dict(color="#e74c3c"),
+            title=dict(text="Herzfrequenz (bpm)", font=dict(color="#e74c3c")),
             tickfont=dict(color="#e74c3c"),
             position=0.0
         ),
         yaxis2=dict(
-            title="HRV (ms)",
-            titlefont=dict(color="#2980b9"),
+            title=dict(text="HRV (ms)", font=dict(color="#2980b9")),
             tickfont=dict(color="#2980b9"),
             overlaying="y",
             side="right",
-            position=0.93,  # leicht nach innen verschoben
+            position=0.93,
             showgrid=False
         ),
         yaxis3=dict(
-            title="Glukose (mg/dL)",
-            titlefont=dict(color="#27ae60"),
+            title=dict(text="Glukose (mg/dL)", font=dict(color="#27ae60")),
             tickfont=dict(color="#27ae60"),
             overlaying="y",
             side="right",
-            position=1.0,  # ganz außen
+            position=1.0,
             range=[y_min, y_max],
             showgrid=False
         ),
@@ -212,7 +209,7 @@ def main():
     delta_hrv = metrics.get("delta_rmssd")
     gl = metrics.get("latest_glucose")
 
-    # === Stil mit pulsierendem Live-Indikator ===
+    # === Metrik-Karten ===
     html = f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
@@ -334,7 +331,7 @@ def main():
     else:
         st.info("Keine Daten im aktuellen Zeitraum verfügbar.")
 
-    # Einzelcharts & Tabellen
+    # Einzelcharts
     if not df_polar.empty:
         st.subheader("❤️ Herzfrequenz (HR)")
         fig_hr = go.Figure()
@@ -362,6 +359,7 @@ def main():
                                     mode="lines+markers", line=dict(color="#27ae60", width=2), marker=dict(size=4)))
         st.plotly_chart(fig_gl, use_container_width=True)
 
+    # Tabellen
     if not df_polar.empty:
         st.subheader("🕒 Letzte Polar-Messwerte")
         st.dataframe(df_polar.tail(10))
