@@ -161,25 +161,38 @@ def render_live_cards(hr, delta_hr, hrv, delta_hrv, gl, gl_delta, gl_dir, window
     html = f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-    .metric-container {{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-bottom:24px;font-family:'Inter',sans-serif;}}
-    .metric-card {{position:relative;background:#161a22;border-radius:14px;padding:20px 22px 26px 24px;box-shadow:0 4px 16px rgba(0,0,0,0.35),inset 0 0 0 1px rgba(255,255,255,0.04);color:#EAECEF;overflow:hidden;}}
-    .accent::before{{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;border-radius:14px 0 0 14px;}}
-    .accent-red::before{{background:#e74c3c;box-shadow:0 0 12px rgba(231,76,60,0.35);}}
-    .accent-blue::before{{background:#2980b9;box-shadow:0 0 12px rgba(41,128,185,0.35);}}
-    .accent-green::before{{background:#27ae60;box-shadow:0 0 12px rgba(39,174,96,0.35);}}
+    .metric-container {{
+        display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-bottom: 24px;
+        font-family: 'Inter', sans-serif;
+    }}
+    .metric-card {{
+        position: relative; background: #161a22; border-radius: 14px;
+        padding: 20px 22px 26px 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.04);
+        color: #EAECEF;
+    }}
+    .metric-live {{
+        position: absolute; top: 10px; right: 14px; display: flex; align-items: center;
+        gap: 6px; font-size: 12px; color: #B7F7C4;
+    }}
+    .pulse {{
+        width: 8px; height: 8px; border-radius: 50%; background: #2ecc71;
+        box-shadow: 0 0 6px #2ecc71; animation: pulse 1.5s infinite;
+    }}
+    @keyframes pulse {{
+        0% {{ opacity: 0.3; transform: scale(0.8); }}
+        50% {{ opacity: 1; transform: scale(1.2); }}
+        100% {{ opacity: 0.3; transform: scale(0.8); }}
+    }}
     </style>
     <div class="metric-container">
-      <div class="metric-card accent accent-red">
-        <div>❤️ HEART RATE</div>
-        <div style="font-size:40px;font-weight:700">{safe_format(hr,0)} <span style="font-size:14px;color:#9AA3B2">bpm</span></div>
+      <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
+        <div>❤️ HEART RATE</div><div style="font-size:40px;font-weight:700">{safe_format(hr,0)} bpm</div>
         <div style="font-size:13px;color:#C8CDD6">{'↑' if (delta_hr or 0)>0 else '↓' if (delta_hr or 0)<0 else '→'} {safe_format(delta_hr,1)} vs mean({window_minutes}m)</div></div>
-      <div class="metric-card accent accent-blue">
-        <div>💗 HRV (RMSSD)</div>
-        <div style="font-size:40px;font-weight:700">{safe_format((hrv*1000) if hrv else None,0)} <span style="font-size:14px;color:#9AA3B2">ms</span></div>
+      <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
+        <div>💗 HRV (RMSSD)</div><div style="font-size:40px;font-weight:700">{safe_format((hrv*1000) if hrv else None,0)} ms</div>
         <div style="font-size:13px;color:#C8CDD6">{'↑' if (delta_hrv or 0)>0 else '↓' if (delta_hrv or 0)<0 else '→'} {safe_format(delta_hrv,1)} vs mean({window_minutes}m)</div></div>
-      <div class="metric-card accent accent-green">
-        <div>🩸 GLUCOSE</div>
-        <div style="font-size:40px;font-weight:700">{safe_format(gl,0)} <span style="font-size:14px;color:#9AA3B2">mg/dL</span></div>
+      <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
+        <div>🩸 GLUCOSE</div><div style="font-size:40px;font-weight:700">{safe_format(gl,0)} mg/dL</div>
         <div style="font-size:13px;color:#C8CDD6">{arrow} {trend_text} ({safe_format(gl_delta,1)} mg/dL/min)</div></div>
     </div>"""
     components.html(html, height=230)
@@ -188,7 +201,9 @@ def render_live_cards(hr, delta_hr, hrv, delta_hrv, gl, gl_delta, gl_dir, window
 # === Main App ===
 def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="🧪", layout="wide")
-    if st_autorefresh: st_autorefresh(interval=2000, key="live_refresh")
+    if st_autorefresh:
+        st_autorefresh(interval=2000, key="live_refresh")
+
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
     st.title("Biofeedback Dashboard – Polar & CGM")
@@ -201,19 +216,29 @@ def main():
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
+    # 1️⃣ Live Cards
     render_live_cards(metrics["avg_hr_60s"], metrics["delta_hr"],
                       metrics["avg_rmssd_60s"], metrics["delta_rmssd"],
                       metrics["latest_glucose"], metrics["glucose_delta"],
                       metrics["glucose_direction"], window_minutes)
 
-    # Combined chart
+    # 2️⃣ Combined Chart
     st.subheader(f"Combined Signals — last {window_minutes} minutes")
     if not df_polar.empty or not df_glucose.empty:
         st.plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
-    else:
-        st.info("No data in the current time window.")
 
-    # HRV Chart (RMSSD + SDNN)
+    # 3️⃣ HR Chart
+    if not df_polar.empty and "hr" in df_polar.columns:
+        st.subheader("Heart Rate (HR)")
+        fig_hr = go.Figure()
+        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"],
+                                    mode="lines", line=dict(color="#e74c3c", width=2),
+                                    name="HR (bpm)"))
+        fig_hr.update_layout(template="plotly_dark", margin=dict(l=0, r=0, t=10, b=0),
+                             height=300, yaxis=dict(title="bpm"))
+        st.plotly_chart(fig_hr, use_container_width=True)
+
+    # 4️⃣ HRV Chart (RMSSD + SDNN)
     if not df_polar.empty and ("hrv_rmssd" in df_polar.columns or "hrv_sdnn" in df_polar.columns):
         st.subheader("HRV (RMSSD & SDNN)")
         fig_hrv = go.Figure()
@@ -230,7 +255,7 @@ def main():
                               yaxis=dict(title="ms"))
         st.plotly_chart(fig_hrv, use_container_width=True)
 
-    # Glucose
+    # 5️⃣ Glucose Chart
     if not df_glucose.empty and "sgv" in df_glucose.columns:
         st.subheader("Glucose (CGM)")
         fig_gl = go.Figure()
@@ -246,7 +271,7 @@ def main():
                              yaxis=dict(range=[min(60, g_min-10), max(160, g_max+15)], title="mg/dL"))
         st.plotly_chart(fig_gl, use_container_width=True)
 
-    # Tables
+    # 6️⃣ Tables
     if not df_polar.empty:
         st.subheader("Recent Polar Samples")
         st.dataframe(df_polar.tail(10))
