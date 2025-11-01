@@ -25,18 +25,23 @@ def connect_to_mongo():
     col_polar = db_polar["polar_data"]
     col_glucose = db_glucose["entries"]
 
+    # 🕐 Jedes Mal neu berechnen, damit Query immer aktuell ist
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
     window_minutes = st.session_state.get("window_minutes", 15)
     time_threshold = now - timedelta(minutes=window_minutes)
 
-    # === Polar data ===
+    # CET → ISO mit Offset
     cet = pytz.timezone("Europe/Zurich")
     time_threshold_str = time_threshold.astimezone(cet).isoformat()
 
-    polar_data = list(col_polar.find({
-        "timestamp": {"$gte": time_threshold_str}
-    }).sort("timestamp", 1))
+    # Debug-Ausgabe (optional)
+    # st.write("Mongo Query from:", time_threshold_str, "to", now.isoformat())
+
+    # 🧠 Abfrage: Alle neuen Polar-Werte seit dem Threshold
+    polar_data = list(col_polar.find(
+        {"timestamp": {"$gte": time_threshold_str}}
+    ).sort("timestamp", 1))
 
     df_polar = pd.DataFrame(polar_data)
 
@@ -45,7 +50,7 @@ def connect_to_mongo():
         df_polar["timestamp"] = df_polar["timestamp"].dt.tz_convert("Europe/Zurich")
         df_polar = df_polar.set_index("timestamp").sort_index()
 
-    # === Glucose data ===
+    # === Glucose ===
     time_threshold_utc = (now - timedelta(minutes=window_minutes)).astimezone(pytz.UTC)
     glucose_data = list(col_glucose.find(
         {"dateString": {"$gte": time_threshold_utc.isoformat()}}
