@@ -295,7 +295,7 @@ def main():
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
-    # 🔹 Live Cards (2 Reihen)
+    # 🔹 Live Cards
     render_live_cards(metrics)
 
     # 🔹 Combined Chart
@@ -307,9 +307,10 @@ def main():
     if not df_polar.empty and "hr" in df_polar.columns:
         st.subheader("Heart Rate (HR)")
         fig_hr = go.Figure()
-        fig_hr.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"],
-                                    mode="lines", line=dict(color="#e74c3c", width=2),
-                                    name="HR (bpm)"))
+        fig_hr.add_trace(go.Scatter(
+            x=df_polar.index, y=df_polar["hr"],
+            mode="lines", line=dict(color="#e74c3c", width=2), name="HR (bpm)"
+        ))
         fig_hr.update_layout(template="plotly_dark", height=300, margin=dict(l=0, r=0, t=10, b=0))
         st.plotly_chart(fig_hr, use_container_width=True)
 
@@ -318,11 +319,15 @@ def main():
         st.subheader("HRV (RMSSD & SDNN)")
         fig_hrv = go.Figure()
         if "hrv_rmssd" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000,
-                                         mode="lines", line=dict(color="#2980b9", width=2), name="RMSSD (ms)"))
+            fig_hrv.add_trace(go.Scatter(
+                x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000,
+                mode="lines", line=dict(color="#2980b9", width=2), name="RMSSD (ms)"
+            ))
         if "hrv_sdnn" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"] * 1000,
-                                         mode="lines", line=dict(color="#5dade2", width=2, dash="dot"), name="SDNN (ms)"))
+            fig_hrv.add_trace(go.Scatter(
+                x=df_polar.index, y=df_polar["hrv_sdnn"] * 1000,
+                mode="lines", line=dict(color="#5dade2", width=2, dash="dot"), name="SDNN (ms)"
+            ))
         fig_hrv.update_layout(template="plotly_dark", height=300, margin=dict(l=0, r=0, t=10, b=0))
         st.plotly_chart(fig_hrv, use_container_width=True)
 
@@ -330,7 +335,9 @@ def main():
     if not df_glucose.empty and "sgv" in df_glucose.columns:
         st.subheader("Glucose (CGM)")
         fig_gl = go.Figure()
-        fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1,
-                         yref="y", y0=70, y1=140,
-                         fillcolor="rgba(46,204,113,0.18)", line=dict(width=0))
-        fig_gl.add_trace(go.Scatter(x=df_glucose.index
+        fig_gl.add_shape(
+            type="rect", xref="paper", x0=0, x1=1,
+            yref="y", y0=70, y1=140,
+            fillcolor="rgba(46,204,113,0.18)", line=dict(width=0)
+        )
+        fig_gl.add_trace(go.Scatter
