@@ -25,7 +25,7 @@ def connect_to_mongo():
     col_polar = db_polar["polar_data"]
     col_glucose = db_glucose["entries"]
 
-    # 🕐 Jedes Mal neu berechnen, damit Query immer aktuell ist
+    # 🕐 Immer aktueller Zeitbereich
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
     window_minutes = st.session_state.get("window_minutes", 15)
@@ -35,14 +35,10 @@ def connect_to_mongo():
     cet = pytz.timezone("Europe/Zurich")
     time_threshold_str = time_threshold.astimezone(cet).isoformat()
 
-    # Debug-Ausgabe (optional)
-    # st.write("Mongo Query from:", time_threshold_str, "to", now.isoformat())
-
-    # 🧠 Abfrage: Alle neuen Polar-Werte seit dem Threshold
+    # === Polar ===
     polar_data = list(col_polar.find(
         {"timestamp": {"$gte": time_threshold_str}}
     ).sort("timestamp", 1))
-
     df_polar = pd.DataFrame(polar_data)
 
     if not df_polar.empty:
@@ -51,11 +47,12 @@ def connect_to_mongo():
         df_polar = df_polar.set_index("timestamp").sort_index()
 
     # === Glucose ===
-    time_threshold_utc = (now - timedelta(minutes=window_minutes)).astimezone(pytz.UTC)
+    time_threshold_utc = time_threshold.astimezone(pytz.UTC)
     glucose_data = list(col_glucose.find(
         {"dateString": {"$gte": time_threshold_utc.isoformat()}}
     ).sort("dateString", 1))
     df_glucose = pd.DataFrame(glucose_data)
+
     if not df_glucose.empty:
         df_glucose["timestamp"] = pd.to_datetime(df_glucose["dateString"], errors="coerce", utc=True)
         df_glucose["timestamp"] = df_glucose["timestamp"].dt.tz_convert("Europe/Zurich")
@@ -89,7 +86,6 @@ def safe_format(value, decimals=0):
 
 
 def safe_power(value):
-    """Skaliert Power-Werte (VLF/LF/HF) aus s² in ms² für bessere Lesbarkeit"""
     try:
         if value is None or pd.isna(value):
             return "–"
@@ -122,8 +118,8 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
         })
     else:
         metrics.update({k: None for k in [
-            "hr", "hrv_rmssd", "hrv_sdnn", "hrv_nn50", "hrv_pnn50",
-            "hrv_stress_index", "hrv_lf_hf_ratio"
+            "hr", "hrv_rmssd", "hrv_sdnn", "hrv_nn50",
+            "hrv_pnn50", "hrv_stress_index", "hrv_lf_hf_ratio"
         ]})
 
     if not df_glucose.empty and "sgv" in df_glucose.columns:
@@ -188,7 +184,7 @@ def create_combined_plot(df_polar, df_glucose):
 # === Live Cards (auto-refresh fix for Streamlit 3.13) ===
 def render_live_cards(metrics):
     arrow, trend_text = map_direction(metrics.get("glucose_direction"))
-    html_id = str(uuid.uuid4())  # unique ID → no cache
+    html_id = str(uuid.uuid4())
 
     html = f"<div id='{html_id}'></div>" + f"""
     <style>
@@ -258,7 +254,9 @@ def render_live_cards(metrics):
     </div>
     """
 
-   components.html(html, height=980, key=f"live_cards_{uuid.uuid4()}")
+    # ✅ fixed indentation and added dynamic key for live refresh
+    components.html(html, height=980, key=f"live_cards_{uuid.uuid4()}")
+
 
 # === Main App ===
 def main():
