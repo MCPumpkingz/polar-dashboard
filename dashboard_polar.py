@@ -77,8 +77,13 @@ def safe_power(value):
     try:
         if value is None or pd.isna(value):
             return "⏳"
-        # Polar liefert s² → wir zeigen ms² an
-        return f"{value * 1e6:.2f}"
+        scaled = value * 1e6  # Polar liefert s² → wir zeigen ms² an
+        if scaled < 1:
+            return f"{scaled:.3f}"
+        elif scaled < 100:
+            return f"{scaled:.1f}"
+        else:
+            return f"{scaled:,.0f}"
     except Exception:
         return "⏳"
 
