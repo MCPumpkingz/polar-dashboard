@@ -207,11 +207,11 @@ def render_live_cards(metrics):
         <div class="metric-card"><div class="metric-label">⚡ LF/HF Ratio</div><div class="metric-value">{safe_format(metrics.get("hrv_lf_hf_ratio"),2)}</div></div>
     </div>
 
-    <div class="metrics-grid">
-        <div class="metric-card"><div class="metric-label">🌊 VLF</div><div class="metric-value">{safe_format(metrics.get("hrv_vlf"),2)}</div></div>
-        <div class="metric-card"><div class="metric-label">⚡ LF</div><div class="metric-value">{safe_format(metrics.get("hrv_lf"),2)}</div></div>
-        <div class="metric-card"><div class="metric-label">💨 HF</div><div class="metric-value">{safe_format(metrics.get("hrv_hf"),2)}</div></div>
-    </div>
+   <div class="metrics-grid">
+    <div class="metric-card"><div class="metric-label">🌊 VLF Power</div><div class="metric-value">{safe_power(metrics.get("hrv_vlf"))}</div></div>
+    <div class="metric-card"><div class="metric-label">⚡ LF Power</div><div class="metric-value">{safe_power(metrics.get("hrv_lf"))}</div></div>
+    <div class="metric-card"><div class="metric-label">💨 HF Power</div><div class="metric-value">{safe_power(metrics.get("hrv_hf"))}</div></div>
+</div>
     """
     st.markdown(html, unsafe_allow_html=True)
 
