@@ -13,6 +13,7 @@ try:
 except ModuleNotFoundError:
     st_autorefresh = None
 
+
 # === MongoDB Connection ===
 def connect_to_mongo():
     MONGO_URI = os.getenv("MONGO_URI") or \
@@ -46,6 +47,7 @@ def connect_to_mongo():
 
     return df_polar, df_glucose
 
+
 # === Direction Mapping ===
 def map_direction(direction):
     mapping = {
@@ -59,6 +61,7 @@ def map_direction(direction):
     }
     return mapping.get(direction, ("→", "stable"))
 
+
 # === Safe formatting ===
 def safe_format(value, decimals=0):
     try:
@@ -68,11 +71,23 @@ def safe_format(value, decimals=0):
     except Exception:
         return "–"
 
+
 # === Metrics ===
 def compute_metrics(df_polar, df_glucose, window_minutes):
     metrics = {}
+
     if not df_polar.empty:
-        last_entry = df_polar.tail(1).iloc[0]
+        # Hole den letzten gültigen (nicht-NaN) Eintrag für jeden HRV-Wert
+        valid = df_polar.dropna(subset=[
+            "hr", "hrv_rmssd", "hrv_sdnn", "hrv_nn50", "hrv_pnn50",
+            "hrv_stress_index", "hrv_lf_hf_ratio", "hrv_vlf", "hrv_lf", "hrv_hf"
+        ])
+
+        if not valid.empty:
+            last_entry = valid.tail(1).iloc[0]
+        else:
+            last_entry = df_polar.tail(1).iloc[0]
+
         metrics.update({
             "hr": last_entry.get("hr"),
             "hrv_rmssd": last_entry.get("hrv_rmssd"),
@@ -92,6 +107,7 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
             "hrv_stress_index": None, "hrv_lf_hf_ratio": None
         })
 
+    # Glucose-Daten
     if not df_glucose.empty and "sgv" in df_glucose.columns:
         latest_glucose = df_glucose["sgv"].iloc[-1]
         direction = df_glucose["direction"].iloc[-1] if "direction" in df_glucose.columns else None
@@ -104,6 +120,7 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
         "glucose_direction": direction
     })
     return metrics
+
 
 # === Combined Plot ===
 def create_combined_plot(df_polar, df_glucose):
@@ -121,7 +138,7 @@ def create_combined_plot(df_polar, df_glucose):
         ))
     if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
         fig.add_trace(go.Scatter(
-            x=df_polar.index, y=df_polar["hrv_rmssd"]*1000,
+            x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000,
             name="HRV RMSSD (ms)", mode="lines",
             line=dict(color="#2980b9", width=2), yaxis="y2"
         ))
@@ -155,6 +172,7 @@ def create_combined_plot(df_polar, df_glucose):
         legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5)
     )
     return fig
+
 
 # === Live Cards ===
 def render_live_cards(metrics):
@@ -230,7 +248,7 @@ def render_live_cards(metrics):
       </div>
 
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
-        <div>🧠 STRESS INDEX</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_stress_index'),1)}</div>
+        <div>🧠 STRESS INDEX</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_stress_index'),2)}</div>
       </div>
 
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
@@ -244,12 +262,12 @@ def render_live_cards(metrics):
         <div>🌊 VLF</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_vlf'),2)}</div>
         <div style="font-size:13px;color:#C8CDD6">Very Low Frequency (slow recovery)</div>
       </div>
-    
+
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>⚡ LF</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_lf'),2)}</div>
         <div style="font-size:13px;color:#C8CDD6">Low Frequency (sympathetic)</div>
       </div>
-    
+
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>💨 HF</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_hf'),2)}</div>
         <div style="font-size:13px;color:#C8CDD6">High Frequency (parasympathetic)</div>
@@ -257,6 +275,7 @@ def render_live_cards(metrics):
     </div>
     """
     components.html(html, height=720)
+
 
 # === Main App ===
 def main():
@@ -299,10 +318,10 @@ def main():
         st.subheader("HRV (RMSSD & SDNN)")
         fig_hrv = go.Figure()
         if "hrv_rmssd" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"]*1000,
+            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000,
                                          mode="lines", line=dict(color="#2980b9", width=2), name="RMSSD (ms)"))
         if "hrv_sdnn" in df_polar.columns:
-            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"]*1000,
+            fig_hrv.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_sdnn"] * 1000,
                                          mode="lines", line=dict(color="#5dade2", width=2, dash="dot"), name="SDNN (ms)"))
         fig_hrv.update_layout(template="plotly_dark", height=300, margin=dict(l=0, r=0, t=10, b=0))
         st.plotly_chart(fig_hrv, use_container_width=True)
@@ -314,21 +333,4 @@ def main():
         fig_gl.add_shape(type="rect", xref="paper", x0=0, x1=1,
                          yref="y", y0=70, y1=140,
                          fillcolor="rgba(46,204,113,0.18)", line=dict(width=0))
-        fig_gl.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"],
-                                    mode="lines+markers", line=dict(color="#27ae60", width=2),
-                                    marker=dict(size=4), name="Glucose (mg/dL)"))
-        g_min, g_max = df_glucose["sgv"].min(), df_glucose["sgv"].max()
-        fig_gl.update_layout(template="plotly_dark", height=300, margin=dict(l=0, r=0, t=10, b=0),
-                             yaxis=dict(range=[min(60, g_min-10), max(160, g_max+15)], title="mg/dL"))
-        st.plotly_chart(fig_gl, use_container_width=True)
-
-    # 🔹 Tabellen
-    if not df_polar.empty:
-        st.subheader("Recent Polar Samples")
-        st.dataframe(df_polar.tail(10))
-    if not df_glucose.empty:
-        st.subheader("Recent CGM Samples")
-        st.dataframe(df_glucose.tail(10))
-
-if __name__ == "__main__":
-    main()
+        fig_gl.add_trace(go.Scatter(x=df_glucose.index
