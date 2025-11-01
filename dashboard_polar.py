@@ -120,29 +120,44 @@ def render_live_cards(metrics):
     arrow, trend_text = map_direction(metrics.get("glucose_direction"))
     html_id = str(uuid.uuid4())
 
-    st.markdown(
-        f"<div id='{html_id}'></div>" + """
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        .metric-container {
-            display: grid;
-            gap: 18px;
-            margin-bottom: 24px;
-            font-family: 'Inter', sans-serif;
-        }
-        .metric-row-3 { grid-template-columns: repeat(3, 1fr); }
-        .metric-row-5 { grid-template-columns: repeat(5, 1fr); }
-        .metric-card {
-            position: relative;
-            background: #161a22;
-            border-radius: 14px;
-            padding: 20px 22px 26px 24px;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.04);
-            color: #fff;
-        }
-        .metric-label { font-size: 14px; color: #bbb; margin-bottom: 4px; }
-        .metric-value { font-size: 26px; font-weight: 600; color: #fff; }
-        </style>
+    # === Stildefinitionen ===
+    st.markdown(f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    .metric-container {{
+        display: grid;
+        gap: 14px;
+        margin-bottom: 26px;
+        font-family: 'Inter', sans-serif;
+    }}
+    .metric-row-3 {{ grid-template-columns: repeat(3, 1fr); }}
+    .metric-row-5 {{ grid-template-columns: repeat(5, 1fr); }}
+    .metric-card {{
+        background: #161a22;
+        border-radius: 14px;
+        padding: 14px 18px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3),
+                    inset 0 0 0 1px rgba(255,255,255,0.05);
+        color: #fff;
+        transition: all 0.2s ease-in-out;
+    }}
+    .metric-card:hover {{
+        transform: scale(1.02);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.45);
+    }}
+    .metric-label {{
+        font-size: 13px;
+        color: #aaa;
+        margin-bottom: 4px;
+        white-space: nowrap;
+    }}
+    .metric-value {{
+        font-size: 22px;
+        font-weight: 600;
+        color: #fff;
+        text-align: left;
+    }}
+    </style>
     """, unsafe_allow_html=True)
 
     def card(label, value, unit="", delta=None):
@@ -158,18 +173,18 @@ def render_live_cards(metrics):
     st.markdown("### 🔴 Live Biofeedback Metrics")
     st.caption(f"Updated: {datetime.now().strftime('%H:%M:%S')}")
 
-    # Reihe 1
+    # === Reihe 1: Hauptmetriken ===
     st.markdown("<div class='metric-container metric-row-3'>", unsafe_allow_html=True)
     card("❤️ Heart Rate (bpm)", metrics.get("hr"))
     card("💗 HRV (RMSSD, ms)", metrics.get("hrv_rmssd") * 1000 if metrics.get("hrv_rmssd") else None)
     g = metrics.get("glucose")
-    arrow, trend_text = map_direction(metrics.get("glucose_direction"))
     g_val = safe_format(g, 0)
+    arrow, trend_text = map_direction(metrics.get("glucose_direction"))
     g_html = f"<div class='metric-card'><div class='metric-label'>🩸 Glucose (mg/dL)</div><div class='metric-value'>{g_val} {arrow} {trend_text}</div></div>"
     st.markdown(g_html, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Reihe 2
+    # === Reihe 2: HRV-Zeitdomäne ===
     st.markdown("<div class='metric-container metric-row-5'>", unsafe_allow_html=True)
     card("💠 SDNN (ms)", metrics.get("hrv_sdnn") * 1000 if metrics.get("hrv_sdnn") else None)
     card("🔢 NN50", metrics.get("hrv_nn50"))
@@ -178,7 +193,7 @@ def render_live_cards(metrics):
     card("⚡ LF/HF Ratio", metrics.get("hrv_lf_hf_ratio"))
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Reihe 3
+    # === Reihe 3: Frequenzbereich ===
     st.markdown("<div class='metric-container metric-row-3'>", unsafe_allow_html=True)
     card("🌊 VLF", metrics.get("hrv_vlf"))
     card("⚡ LF", metrics.get("hrv_lf"))
