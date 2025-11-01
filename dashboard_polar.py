@@ -171,51 +171,104 @@ def create_combined_plot(df_polar, df_glucose):
 # === Live Cards ===
 def render_live_cards(metrics):
     arrow, trend_text = map_direction(metrics.get("glucose_direction"))
-    html = f"""<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-    .metric-container{{display:grid;gap:18px;margin-bottom:24px;font-family:'Inter',sans-serif;}}
-    .metric-row-3{{grid-template-columns:repeat(3,1fr);}}
-    .metric-row-5{{grid-template-columns:repeat(5,1fr);}}
-    .metric-card{{position:relative;background:#161a22;border-radius:14px;padding:20px 22px 26px 24px;
-    box-shadow:0 4px 16px rgba(0,0,0,0.35),inset 0 0 0 1px rgba(255,255,255,0.04);color:#EAECEF;min-height:120px;}}
-    .metric-live{{position:absolute;top:10px;right:14px;display:flex;align-items:center;gap:6px;
-    font-size:12px;color:#B7F7C4;}}
-    .pulse{{width:8px;height:8px;border-radius:50%;background:#2ecc71;box-shadow:0 0 6px #2ecc71;
-    animation:pulse 1.5s infinite;}}
-    @keyframes pulse{{0%{{opacity:0.3;transform:scale(0.8);}}50%{{opacity:1;transform:scale(1.2);}}
-    100%{{opacity:0.3;transform:scale(0.8);}}}}</style>
 
+    html = f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    .metric-container {{
+        display: grid;
+        gap: 18px;
+        margin-bottom: 24px;
+        font-family: 'Inter', sans-serif;
+    }}
+    .metric-row-3 {{
+        grid-template-columns: repeat(3, 1fr);
+    }}
+    .metric-row-5 {{
+        grid-template-columns: repeat(5, 1fr);
+    }}
+    .metric-card {{
+        position: relative; background: #161a22; border-radius: 14px;
+        padding: 20px 22px 26px 24px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.04);
+        color: #EAECEF;
+        min-height: 120px;
+    }}
+    .metric-live {{
+        position: absolute; top: 10px; right: 14px;
+        display: flex; align-items: center; gap: 6px;
+        font-size: 12px; color: #B7F7C4;
+    }}
+    .pulse {{
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #2ecc71; box-shadow: 0 0 6px #2ecc71;
+        animation: pulse 1.5s infinite;
+    }}
+    @keyframes pulse {{
+        0% {{ opacity: 0.3; transform: scale(0.8); }}
+        50% {{ opacity: 1; transform: scale(1.2); }}
+        100% {{ opacity: 0.3; transform: scale(0.8); }}
+    }}
+    </style>
+
+    <!-- Reihe 1 -->
     <div class="metric-container metric-row-3">
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>❤️ HEART RATE</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hr'),0)} bpm</div>
       </div>
+
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>💗 HRV (RMSSD)</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_rmssd')*1000 if metrics.get('hrv_rmssd') else None,0)} ms</div>
       </div>
+
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>🩸 GLUCOSE</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('glucose'),0)} mg/dL</div>
         <div style="font-size:13px;color:#C8CDD6">{arrow} {trend_text}</div>
       </div>
     </div>
 
+    <!-- Reihe 2 -->
     <div class="metric-container metric-row-5">
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>💠 SDNN</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_sdnn')*1000 if metrics.get('hrv_sdnn') else None,0)} ms</div>
       </div>
+
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>🔢 NN50</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_nn50'),0)}</div>
       </div>
+
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>📊 pNN50</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_pnn50'),1)}%</div>
       </div>
+
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>🧠 STRESS INDEX</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_stress_index'),2)}</div>
       </div>
+
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>⚡ LF/HF RATIO</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_lf_hf_ratio'),2)}</div>
       </div>
     </div>
+
+    <!-- Reihe 3 -->
+    <div class="metric-container metric-row-3">
+      <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
+        <div>🌊 VLF</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_vlf'),2)}</div>
+        <div style="font-size:13px;color:#C8CDD6">Very Low Frequency (slow recovery)</div>
+      </div>
+    
+      <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
+        <div>⚡ LF</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_lf'),2)}</div>
+        <div style="font-size:13px;color:#C8CDD6">Low Frequency (sympathetic)</div>
+      </div>
+    
+      <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
+        <div>💨 HF</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_hf'),2)}</div>
+        <div style="font-size:13px;color:#C8CDD6">High Frequency (parasympathetic)</div>
+      </div>
+    </div>
     """
-    components.html(html, height=720)
+    components.html(html, height=980)
 
 
 # === Main App ===
