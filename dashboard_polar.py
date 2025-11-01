@@ -1,4 +1,4 @@
-import os
+mport os
 from datetime import datetime, timedelta
 import pandas as pd
 import pytz
@@ -12,7 +12,6 @@ try:
     from streamlit_autorefresh import st_autorefresh
 except ModuleNotFoundError:
     st_autorefresh = None
-
 
 # === MongoDB Connection ===
 def connect_to_mongo():
@@ -47,7 +46,6 @@ def connect_to_mongo():
 
     return df_polar, df_glucose
 
-
 # === Direction Mapping ===
 def map_direction(direction):
     mapping = {
@@ -61,7 +59,6 @@ def map_direction(direction):
     }
     return mapping.get(direction, ("→", "stable"))
 
-
 # === Safe formatting ===
 def safe_format(value, decimals=0):
     try:
@@ -70,7 +67,6 @@ def safe_format(value, decimals=0):
         return f"{value:.{decimals}f}"
     except Exception:
         return "–"
-
 
 # === Metrics ===
 def compute_metrics(df_polar, df_glucose, window_minutes):
@@ -84,7 +80,7 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
             "hrv_nn50": last_entry.get("hrv_nn50"),
             "hrv_pnn50": last_entry.get("hrv_pnn50"),
             "hrv_stress_index": last_entry.get("hrv_stress_index"),
-            "hrv_lf_hf_ratio": last_entry.get("hrv_lf_hf_ratio")
+            "hrv_lf_hf_ratio": last_entry.get("hrv_lf_hf_ratio"),
             "hrv_vlf": last_entry.get("hrv_vlf"),
             "hrv_lf": last_entry.get("hrv_lf"),
             "hrv_hf": last_entry.get("hrv_hf"),
@@ -108,7 +104,6 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
         "glucose_direction": direction
     })
     return metrics
-
 
 # === Combined Plot ===
 def create_combined_plot(df_polar, df_glucose):
@@ -160,7 +155,6 @@ def create_combined_plot(df_polar, df_glucose):
         legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5)
     )
     return fig
-
 
 # === Live Cards ===
 def render_live_cards(metrics):
@@ -260,7 +254,6 @@ def render_live_cards(metrics):
     """
     components.html(html, height=480)
 
-
 # === Main App ===
 def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="🧪", layout="wide")
@@ -332,7 +325,6 @@ def main():
     if not df_glucose.empty:
         st.subheader("Recent CGM Samples")
         st.dataframe(df_glucose.tail(10))
-
 
 if __name__ == "__main__":
     main()
