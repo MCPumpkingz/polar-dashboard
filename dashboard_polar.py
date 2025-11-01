@@ -99,10 +99,12 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
     metrics = {}
 
     if not df_polar.empty:
+        # ❗ VLF, LF, HF weglassen, damit Live-Update sofort läuft
         valid = df_polar.dropna(subset=[
-            "hr", "hrv_rmssd", "hrv_sdnn", "hrv_nn50", "hrv_pnn50",
-            "hrv_stress_index", "hrv_lf_hf_ratio", "hrv_vlf", "hrv_lf", "hrv_hf"
+            "hr", "hrv_rmssd", "hrv_sdnn", "hrv_nn50",
+            "hrv_pnn50", "hrv_stress_index", "hrv_lf_hf_ratio"
         ])
+
         last_entry = valid.tail(1).iloc[0] if not valid.empty else df_polar.tail(1).iloc[0]
         metrics.update({
             "hr": last_entry.get("hr"),
@@ -118,8 +120,8 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
         })
     else:
         metrics.update({k: None for k in [
-            "hr", "hrv_rmssd", "hrv_sdnn", "hrv_nn50",
-            "hrv_pnn50", "hrv_stress_index", "hrv_lf_hf_ratio"
+            "hr", "hrv_rmssd", "hrv_sdnn", "hrv_nn50", "hrv_pnn50",
+            "hrv_stress_index", "hrv_lf_hf_ratio", "hrv_vlf", "hrv_lf", "hrv_hf"
         ]})
 
     if not df_glucose.empty and "sgv" in df_glucose.columns:
@@ -132,6 +134,7 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
         "glucose": latest_glucose,
         "glucose_direction": direction
     })
+
     return metrics
 
 
