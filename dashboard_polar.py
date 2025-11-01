@@ -254,8 +254,8 @@ def render_live_cards(metrics):
     </div>
     """
 
-    # ✅ fixed indentation and added dynamic key for live refresh
-    components.html(html, height=980, key=f"live_cards_{uuid.uuid4()}")
+    st.empty()  # forces re-render of next component
+    components.html(html, height=980)
 
 
 # === Main App ===
