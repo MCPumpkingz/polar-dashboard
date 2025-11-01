@@ -73,6 +73,14 @@ def safe_format(value, decimals=0):
     except Exception:
         return "⏳"
 
+def safe_power(value):
+    try:
+        if value is None or pd.isna(value):
+            return "⏳"
+        # Polar liefert s² → wir zeigen ms² an
+        return f"{value * 1e6:.2f}"
+    except Exception:
+        return "⏳"
 
 # === Metrics ===
 def compute_metrics(df_polar, df_glucose, window_minutes):
