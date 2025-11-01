@@ -84,7 +84,10 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
             "hrv_nn50": last_entry.get("hrv_nn50"),
             "hrv_pnn50": last_entry.get("hrv_pnn50"),
             "hrv_stress_index": last_entry.get("hrv_stress_index"),
-            "hrv_lf_hf_ratio": last_entry.get("hrv_lf_hf_ratio"),
+            "hrv_lf_hf_ratio": last_entry.get("hrv_lf_hf_ratio")
+            "hrv_vlf": last_entry.get("hrv_vlf"),
+            "hrv_lf": last_entry.get("hrv_lf"),
+            "hrv_hf": last_entry.get("hrv_hf"),
         })
     else:
         metrics.update({
@@ -230,6 +233,28 @@ def render_live_cards(metrics):
 
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>⚡ LF/HF RATIO</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_lf_hf_ratio'),2)}</div>
+      </div>
+    <!-- Reihe 3 -->
+    <div class="metric-container">
+      <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
+        <div>🌊 VLF</div><div style="font-size:40px;font-weight:700">
+          {safe_format(metrics.get('hrv_vlf'),2)}
+        </div>
+        <div style="font-size:13px;color:#C8CDD6">Very Low Frequency (slow recovery)</div>
+      </div>
+    
+      <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
+        <div>⚡ LF</div><div style="font-size:40px;font-weight:700">
+          {safe_format(metrics.get('hrv_lf'),2)}
+        </div>
+        <div style="font-size:13px;color:#C8CDD6">Low Frequency (sympathetic)</div>
+      </div>
+    
+      <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
+        <div>💨 HF</div><div style="font-size:40px;font-weight:700">
+          {safe_format(metrics.get('hrv_hf'),2)}
+        </div>
+        <div style="font-size:13px;color:#C8CDD6">High Frequency (parasympathetic)</div>
       </div>
     </div>
     """
