@@ -139,16 +139,6 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
 
 
 # === Styled Live Cards ===
-def render_live_cards(metrics):
-    arrow, trend_text = map_direction(metrics.get("glucose_direction"))
-    st.markdown("### 🔴 Live Biofeedback Metrics")
-    st.caption(f"Updated: {datetime.now().strftime('%H:%M:%S')}")
-
-    # === HTML + CSS Layout (echtes Grid) ===
-    html_id = str(uuid.uuid4())
-    g_val = safe_format(metrics.get("glucose"), 0)
-    arrow, trend_text = map_direction(metrics.get("glucose_direction"))
-
     html = f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
@@ -194,9 +184,18 @@ def render_live_cards(metrics):
     </style>
 
     <div class="metrics-grid">
-        <div class="metric-card"><div class="metric-label">❤️ Heart Rate (bpm)</div><div class="metric-value">{safe_format(metrics.get("hr"),0)}</div></div>
-        <div class="metric-card"><div class="metric-label">💗 HRV (RMSSD, ms)</div><div class="metric-value">{safe_format(metrics.get("hrv_rmssd")*1000 if metrics.get("hrv_rmssd") else None,0)}</div></div>
-        <div class="metric-card"><div class="metric-label">🩸 Glucose (mg/dL)</div><div class="metric-value">{g_val} {arrow} {trend_text}</div></div>
+        <div class="metric-card">
+            <div class="metric-label">❤️ Heart Rate (bpm)</div>
+            <div class="metric-value">{safe_format(metrics.get("hr"),0)}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">💗 HRV (RMSSD, ms)</div>
+            <div class="metric-value">{safe_format(metrics.get("hrv_rmssd")*1000 if metrics.get("hrv_rmssd") else None,0)}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">🩸 Glucose (mg/dL)</div>
+            <div class="metric-value">{g_val} {arrow} {trend_text}</div>
+        </div>
     </div>
 
     <div class="metrics-grid-5">
@@ -207,12 +206,13 @@ def render_live_cards(metrics):
         <div class="metric-card"><div class="metric-label">⚡ LF/HF Ratio</div><div class="metric-value">{safe_format(metrics.get("hrv_lf_hf_ratio"),2)}</div></div>
     </div>
 
-   <div class="metrics-grid">
-    <div class="metric-card"><div class="metric-label">🌊 VLF Power</div><div class="metric-value">{safe_power(metrics.get("hrv_vlf"))}</div></div>
-    <div class="metric-card"><div class="metric-label">⚡ LF Power</div><div class="metric-value">{safe_power(metrics.get("hrv_lf"))}</div></div>
-    <div class="metric-card"><div class="metric-label">💨 HF Power</div><div class="metric-value">{safe_power(metrics.get("hrv_hf"))}</div></div>
-</div>
+    <div class="metrics-grid">
+        <div class="metric-card"><div class="metric-label">🌊 VLF Power</div><div class="metric-value">{safe_power(metrics.get("hrv_vlf"))}</div></div>
+        <div class="metric-card"><div class="metric-label">⚡ LF Power</div><div class="metric-value">{safe_power(metrics.get("hrv_lf"))}</div></div>
+        <div class="metric-card"><div class="metric-label">💨 HF Power</div><div class="metric-value">{safe_power(metrics.get("hrv_hf"))}</div></div>
+    </div>
     """
+
     st.markdown(html, unsafe_allow_html=True)
 
 # === Plot ===
