@@ -29,11 +29,22 @@ def connect_to_mongo():
     window_minutes = st.session_state.get("window_minutes", 15)
     time_threshold = now - timedelta(minutes=window_minutes)
 
-    # Polar data
-    polar_data = list(col_polar.find({"timestamp": {"$gte": time_threshold.isoformat()}}).sort("timestamp", 1))
+    # === Polar data ===
+    # Zeitzone erzwingen (CET → ISO mit Offset)
+    cet = pytz.timezone("Europe/Zurich")
+    time_threshold_str = time_threshold.astimezone(cet).isoformat()
+
+    # Abfrage mit CET-Zeitstempel
+    polar_data = list(col_polar.find({
+        "timestamp": {"$gte": time_threshold_str}
+    }).sort("timestamp", 1))
+
     df_polar = pd.DataFrame(polar_data)
+
     if not df_polar.empty:
-        df_polar["timestamp"] = pd.to_datetime(df_polar["timestamp"], errors="coerce")
+        # Timestamps korrekt in CET interpretieren
+        df_polar["timestamp"] = pd.to_datetime(df_polar["timestamp"], errors="coerce", utc=True)
+        df_polar["timestamp"] = df_polar["timestamp"].dt.tz_convert("Europe/Zurich")
         df_polar = df_polar.set_index("timestamp").sort_index()
 
     # Glucose data
