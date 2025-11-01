@@ -5,8 +5,8 @@ import pytz
 import streamlit as st
 from pymongo import MongoClient
 import plotly.graph_objects as go
+import uuid
 
-# === Auto-Refresh (every 2 s) ===
 try:
     from streamlit_autorefresh import st_autorefresh
 except ModuleNotFoundError:
@@ -29,7 +29,6 @@ def connect_to_mongo():
     time_threshold = now - timedelta(minutes=window_minutes)
     time_threshold_str = time_threshold.astimezone(tz).isoformat()
 
-    # === Polar ===
     polar_data = list(col_polar.find(
         {"timestamp": {"$gte": time_threshold_str}}
     ).sort("timestamp", 1))
@@ -39,7 +38,6 @@ def connect_to_mongo():
         df_polar["timestamp"] = df_polar["timestamp"].dt.tz_convert("Europe/Zurich")
         df_polar = df_polar.set_index("timestamp").sort_index()
 
-    # === Glucose ===
     time_threshold_utc = time_threshold.astimezone(pytz.UTC)
     glucose_data = list(col_glucose.find(
         {"dateString": {"$gte": time_threshold_utc.isoformat()}}
@@ -53,7 +51,7 @@ def connect_to_mongo():
     return df_polar, df_glucose
 
 
-# === Direction Mapping ===
+# === Mapping & Formatting ===
 def map_direction(direction):
     mapping = {
         "DoubleUp": ("⬆️⬆️", "rising fast"),
@@ -67,15 +65,13 @@ def map_direction(direction):
     return mapping.get(direction, ("→", "stable"))
 
 
-# === Safe formatting ===
 def safe_format(value, decimals=0):
     try:
-        if value is None or (isinstance(value, float) and pd.isna(value)):
-            # Kürzerer Placeholder verhindert Layout-Shift
-            return "–"
+        if value is None or pd.isna(value):
+            return "⏳"
         return f"{value:.{decimals}f}"
     except Exception:
-        return "–"
+        return "⏳"
 
 
 # === Metrics ===
@@ -87,18 +83,18 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
 
     metrics = {}
     if not df_polar.empty:
-        last_entry = df_polar.iloc[-1]
+        last = df_polar.iloc[-1]
         metrics.update({
-            "hr": sanitize(last_entry.get("hr")),
-            "hrv_rmssd": sanitize(last_entry.get("hrv_rmssd")),
-            "hrv_sdnn": sanitize(last_entry.get("hrv_sdnn")),
-            "hrv_nn50": sanitize(last_entry.get("hrv_nn50")),
-            "hrv_pnn50": sanitize(last_entry.get("hrv_pnn50")),
-            "hrv_stress_index": sanitize(last_entry.get("hrv_stress_index")),
-            "hrv_lf_hf_ratio": sanitize(last_entry.get("hrv_lf_hf_ratio")),
-            "hrv_vlf": sanitize(last_entry.get("hrv_vlf")),
-            "hrv_lf": sanitize(last_entry.get("hrv_lf")),
-            "hrv_hf": sanitize(last_entry.get("hrv_hf")),
+            "hr": sanitize(last.get("hr")),
+            "hrv_rmssd": sanitize(last.get("hrv_rmssd")),
+            "hrv_sdnn": sanitize(last.get("hrv_sdnn")),
+            "hrv_nn50": sanitize(last.get("hrv_nn50")),
+            "hrv_pnn50": sanitize(last.get("hrv_pnn50")),
+            "hrv_stress_index": sanitize(last.get("hrv_stress_index")),
+            "hrv_lf_hf_ratio": sanitize(last.get("hrv_lf_hf_ratio")),
+            "hrv_vlf": sanitize(last.get("hrv_vlf")),
+            "hrv_lf": sanitize(last.get("hrv_lf")),
+            "hrv_hf": sanitize(last.get("hrv_hf")),
         })
     else:
         metrics.update({k: None for k in [
@@ -119,7 +115,78 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
     return metrics
 
 
-# === Combined Plot ===
+# === Styled Live Cards ===
+def render_live_cards(metrics):
+    arrow, trend_text = map_direction(metrics.get("glucose_direction"))
+    html_id = str(uuid.uuid4())
+
+    st.markdown(
+        f"<div id='{html_id}'></div>" + """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        .metric-container {
+            display: grid;
+            gap: 18px;
+            margin-bottom: 24px;
+            font-family: 'Inter', sans-serif;
+        }
+        .metric-row-3 { grid-template-columns: repeat(3, 1fr); }
+        .metric-row-5 { grid-template-columns: repeat(5, 1fr); }
+        .metric-card {
+            position: relative;
+            background: #161a22;
+            border-radius: 14px;
+            padding: 20px 22px 26px 24px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.04);
+            color: #fff;
+        }
+        .metric-label { font-size: 14px; color: #bbb; margin-bottom: 4px; }
+        .metric-value { font-size: 26px; font-weight: 600; color: #fff; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    def card(label, value, unit="", delta=None):
+        val = safe_format(value, 0)
+        html = f"""
+        <div class='metric-card'>
+            <div class='metric-label'>{label}</div>
+            <div class='metric-value'>{val}{unit}</div>
+        </div>
+        """
+        st.markdown(html, unsafe_allow_html=True)
+
+    st.markdown("### 🔴 Live Biofeedback Metrics")
+    st.caption(f"Updated: {datetime.now().strftime('%H:%M:%S')}")
+
+    # Reihe 1
+    st.markdown("<div class='metric-container metric-row-3'>", unsafe_allow_html=True)
+    card("❤️ Heart Rate (bpm)", metrics.get("hr"))
+    card("💗 HRV (RMSSD, ms)", metrics.get("hrv_rmssd") * 1000 if metrics.get("hrv_rmssd") else None)
+    g = metrics.get("glucose")
+    arrow, trend_text = map_direction(metrics.get("glucose_direction"))
+    g_val = safe_format(g, 0)
+    g_html = f"<div class='metric-card'><div class='metric-label'>🩸 Glucose (mg/dL)</div><div class='metric-value'>{g_val} {arrow} {trend_text}</div></div>"
+    st.markdown(g_html, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Reihe 2
+    st.markdown("<div class='metric-container metric-row-5'>", unsafe_allow_html=True)
+    card("💠 SDNN (ms)", metrics.get("hrv_sdnn") * 1000 if metrics.get("hrv_sdnn") else None)
+    card("🔢 NN50", metrics.get("hrv_nn50"))
+    card("📊 pNN50 (%)", metrics.get("hrv_pnn50"))
+    card("🧠 Stress Index", metrics.get("hrv_stress_index"))
+    card("⚡ LF/HF Ratio", metrics.get("hrv_lf_hf_ratio"))
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Reihe 3
+    st.markdown("<div class='metric-container metric-row-3'>", unsafe_allow_html=True)
+    card("🌊 VLF", metrics.get("hrv_vlf"))
+    card("⚡ LF", metrics.get("hrv_lf"))
+    card("💨 HF", metrics.get("hrv_hf"))
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+# === Plot ===
 def create_combined_plot(df_polar, df_glucose):
     fig = go.Figure()
     y_min, y_max = (40, 180)
@@ -128,23 +195,14 @@ def create_combined_plot(df_polar, df_glucose):
         y_min, y_max = max(40, g_min - 20), min(250, g_max + 20)
 
     if not df_polar.empty and "hr" in df_polar.columns:
-        fig.add_trace(go.Scatter(
-            x=df_polar.index, y=df_polar["hr"],
-            name="Heart Rate (bpm)", mode="lines",
-            line=dict(color="#e74c3c", width=2), yaxis="y"
-        ))
+        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hr"],
+            name="Heart Rate (bpm)", mode="lines", line=dict(color="#e74c3c", width=2), yaxis="y"))
     if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
-        fig.add_trace(go.Scatter(
-            x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000,
-            name="HRV RMSSD (ms)", mode="lines",
-            line=dict(color="#2980b9", width=2), yaxis="y2"
-        ))
+        fig.add_trace(go.Scatter(x=df_polar.index, y=df_polar["hrv_rmssd"] * 1000,
+            name="HRV RMSSD (ms)", mode="lines", line=dict(color="#2980b9", width=2), yaxis="y2"))
     if not df_glucose.empty and "sgv" in df_glucose.columns:
-        fig.add_trace(go.Scatter(
-            x=df_glucose.index, y=df_glucose["sgv"],
-            name="Glucose (mg/dL)", mode="lines",
-            line=dict(color="#27ae60", width=3), yaxis="y3"
-        ))
+        fig.add_trace(go.Scatter(x=df_glucose.index, y=df_glucose["sgv"],
+            name="Glucose (mg/dL)", mode="lines", line=dict(color="#27ae60", width=3), yaxis="y3"))
 
     fig.update_layout(
         template="plotly_dark",
@@ -165,58 +223,7 @@ def create_combined_plot(df_polar, df_glucose):
     return fig
 
 
-# === Live Cards ===
-def render_live_cards(metrics):
-    arrow, trend_text = map_direction(metrics.get("glucose_direction"))
-    st.markdown("### 🔴 Live Biofeedback Metrics")
-    st.caption(f"Updated: {datetime.now().strftime('%H:%M:%S')}")
-
-    def show_metric(label, value, unit="", delta=None):
-        # Wenn Wert fehlt → „⏳“ aber fester Platzhalter
-        if value is None or (isinstance(value, str) and value.lower().startswith("na")):
-            st.metric(label, "⏳", delta)
-        else:
-            st.metric(label, safe_format(value, 0) + unit, delta)
-
-    # === Reihe 1 ===
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        show_metric("❤️ Heart Rate (bpm)", metrics.get("hr"))
-    with col2:
-        rmssd = metrics.get("hrv_rmssd")
-        show_metric("💗 HRV (RMSSD, ms)", rmssd * 1000 if rmssd else None)
-    with col3:
-        glucose = metrics.get("glucose")
-        if glucose is None:
-            st.metric("🩸 Glucose (mg/dL)", "⏳")
-        else:
-            st.metric("🩸 Glucose (mg/dL)", safe_format(glucose, 0), f"{arrow} {trend_text}")
-
-    # === Reihe 2 ===
-    col4, col5, col6, col7, col8 = st.columns(5)
-    with col4:
-        sdnn = metrics.get("hrv_sdnn")
-        show_metric("💠 SDNN (ms)", sdnn * 1000 if sdnn else None)
-    with col5:
-        show_metric("🔢 NN50", metrics.get("hrv_nn50"))
-    with col6:
-        show_metric("📊 pNN50 (%)", metrics.get("hrv_pnn50"))
-    with col7:
-        show_metric("🧠 Stress Index", metrics.get("hrv_stress_index"))
-    with col8:
-        show_metric("⚡ LF/HF Ratio", metrics.get("hrv_lf_hf_ratio"))
-
-    # === Reihe 3 ===
-    col9, col10, col11 = st.columns(3)
-    with col9:
-        show_metric("🌊 VLF", metrics.get("hrv_vlf"))
-    with col10:
-        show_metric("⚡ LF", metrics.get("hrv_lf"))
-    with col11:
-        show_metric("💨 HF", metrics.get("hrv_hf"))
-
-
-# === Main App ===
+# === Main ===
 def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="🧪", layout="wide")
     if st_autorefresh:
