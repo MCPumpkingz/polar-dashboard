@@ -29,9 +29,7 @@ def connect_to_mongo():
     time_threshold = now - timedelta(minutes=window_minutes)
     time_threshold_str = time_threshold.astimezone(tz).isoformat()
 
-    polar_data = list(col_polar.find(
-        {"timestamp": {"$gte": time_threshold_str}}
-    ).sort("timestamp", 1))
+    polar_data = list(col_polar.find({"timestamp": {"$gte": time_threshold_str}}).sort("timestamp", 1))
     df_polar = pd.DataFrame(polar_data)
     if not df_polar.empty:
         df_polar["timestamp"] = pd.to_datetime(df_polar["timestamp"], errors="coerce", utc=True)
@@ -39,9 +37,7 @@ def connect_to_mongo():
         df_polar = df_polar.set_index("timestamp").sort_index()
 
     time_threshold_utc = time_threshold.astimezone(pytz.UTC)
-    glucose_data = list(col_glucose.find(
-        {"dateString": {"$gte": time_threshold_utc.isoformat()}}
-    ).sort("dateString", 1))
+    glucose_data = list(col_glucose.find({"dateString": {"$gte": time_threshold_utc.isoformat()}}).sort("dateString", 1))
     df_glucose = pd.DataFrame(glucose_data)
     if not df_glucose.empty:
         df_glucose["timestamp"] = pd.to_datetime(df_glucose["dateString"], errors="coerce", utc=True)
@@ -60,7 +56,7 @@ def map_direction(direction):
         "Flat": ("→", "stable"),
         "FortyFiveDown": ("↘️", "falling slightly"),
         "SingleDown": ("⬇️", "falling"),
-        "DoubleDown": ("⬇️⬇️", "falling fast")
+        "DoubleDown": ("⬇️⬇️", "falling fast"),
     }
     return mapping.get(direction, ("→", "stable"))
 
@@ -73,29 +69,21 @@ def safe_format(value, decimals=0):
     except Exception:
         return "⏳"
 
+
 def safe_power(value):
     try:
         if value is None or pd.isna(value):
             return "⏳"
-
-        # Wenn Wert < 0.001 → wahrscheinlich s² → in ms² umrechnen
-        if value < 0.001:
+        if value < 0.001:  # Sekunden² → Millisekunden²
             scaled = value * 1e6
             unit = "ms²"
         else:
-            scaled = value * 100  # normierte Einheiten in %
+            scaled = value * 100  # normierte Power (0–1 → %)
             unit = "%"
-
-        if scaled < 1:
-            display = f"{scaled:.2f}"
-        elif scaled < 100:
-            display = f"{scaled:.1f}"
-        else:
-            display = f"{scaled:,.0f}"
-
-        return f"{display} {unit}"
+        return f"{scaled:.2f} {unit}"
     except Exception:
         return "⏳"
+
 
 # === Metrics ===
 def compute_metrics(df_polar, df_glucose, window_minutes):
@@ -139,6 +127,10 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
 
 
 # === Styled Live Cards ===
+def render_live_cards(metrics):
+    arrow, trend_text = map_direction(metrics.get("glucose_direction"))
+    g_val = safe_format(metrics.get("glucose"), 0)
+
     html = f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
@@ -184,18 +176,9 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
     </style>
 
     <div class="metrics-grid">
-        <div class="metric-card">
-            <div class="metric-label">❤️ Heart Rate (bpm)</div>
-            <div class="metric-value">{safe_format(metrics.get("hr"),0)}</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">💗 HRV (RMSSD, ms)</div>
-            <div class="metric-value">{safe_format(metrics.get("hrv_rmssd")*1000 if metrics.get("hrv_rmssd") else None,0)}</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">🩸 Glucose (mg/dL)</div>
-            <div class="metric-value">{g_val} {arrow} {trend_text}</div>
-        </div>
+        <div class="metric-card"><div class="metric-label">❤️ Heart Rate (bpm)</div><div class="metric-value">{safe_format(metrics.get("hr"),0)}</div></div>
+        <div class="metric-card"><div class="metric-label">💗 HRV (RMSSD, ms)</div><div class="metric-value">{safe_format(metrics.get("hrv_rmssd")*1000 if metrics.get("hrv_rmssd") else None,0)}</div></div>
+        <div class="metric-card"><div class="metric-label">🩸 Glucose (mg/dL)</div><div class="metric-value">{g_val} {arrow} {trend_text}</div></div>
     </div>
 
     <div class="metrics-grid-5">
@@ -212,8 +195,8 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
         <div class="metric-card"><div class="metric-label">💨 HF Power</div><div class="metric-value">{safe_power(metrics.get("hrv_hf"))}</div></div>
     </div>
     """
-
     st.markdown(html, unsafe_allow_html=True)
+
 
 # === Plot ===
 def create_combined_plot(df_polar, df_glucose):
