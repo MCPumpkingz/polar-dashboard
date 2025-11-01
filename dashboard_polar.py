@@ -258,8 +258,7 @@ def render_live_cards(metrics):
     </div>
     """
 
-    components.html(html, height=980)
-
+   components.html(html, height=980, key=f"live_cards_{uuid.uuid4()}")
 
 # === Main App ===
 def main():
