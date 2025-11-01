@@ -77,16 +77,11 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
     metrics = {}
 
     if not df_polar.empty:
-        # Hole den letzten gültigen (nicht-NaN) Eintrag für jeden HRV-Wert
         valid = df_polar.dropna(subset=[
             "hr", "hrv_rmssd", "hrv_sdnn", "hrv_nn50", "hrv_pnn50",
             "hrv_stress_index", "hrv_lf_hf_ratio", "hrv_vlf", "hrv_lf", "hrv_hf"
         ])
-
-        if not valid.empty:
-            last_entry = valid.tail(1).iloc[0]
-        else:
-            last_entry = df_polar.tail(1).iloc[0]
+        last_entry = valid.tail(1).iloc[0] if not valid.empty else df_polar.tail(1).iloc[0]
 
         metrics.update({
             "hr": last_entry.get("hr"),
@@ -107,7 +102,6 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
             "hrv_stress_index": None, "hrv_lf_hf_ratio": None
         })
 
-    # Glucose-Daten
     if not df_glucose.empty and "sgv" in df_glucose.columns:
         latest_glucose = df_glucose["sgv"].iloc[-1]
         direction = df_glucose["direction"].iloc[-1] if "direction" in df_glucose.columns else None
@@ -177,100 +171,47 @@ def create_combined_plot(df_polar, df_glucose):
 # === Live Cards ===
 def render_live_cards(metrics):
     arrow, trend_text = map_direction(metrics.get("glucose_direction"))
+    html = f"""<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    .metric-container{{display:grid;gap:18px;margin-bottom:24px;font-family:'Inter',sans-serif;}}
+    .metric-row-3{{grid-template-columns:repeat(3,1fr);}}
+    .metric-row-5{{grid-template-columns:repeat(5,1fr);}}
+    .metric-card{{position:relative;background:#161a22;border-radius:14px;padding:20px 22px 26px 24px;
+    box-shadow:0 4px 16px rgba(0,0,0,0.35),inset 0 0 0 1px rgba(255,255,255,0.04);color:#EAECEF;min-height:120px;}}
+    .metric-live{{position:absolute;top:10px;right:14px;display:flex;align-items:center;gap:6px;
+    font-size:12px;color:#B7F7C4;}}
+    .pulse{{width:8px;height:8px;border-radius:50%;background:#2ecc71;box-shadow:0 0 6px #2ecc71;
+    animation:pulse 1.5s infinite;}}
+    @keyframes pulse{{0%{{opacity:0.3;transform:scale(0.8);}}50%{{opacity:1;transform:scale(1.2);}}
+    100%{{opacity:0.3;transform:scale(0.8);}}}}</style>
 
-    html = f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-    .metric-container {{
-        display: grid;
-        gap: 18px;
-        margin-bottom: 24px;
-        font-family: 'Inter', sans-serif;
-    }}
-    .metric-row-3 {{
-        grid-template-columns: repeat(3, 1fr);
-    }}
-    .metric-row-5 {{
-        grid-template-columns: repeat(5, 1fr);
-    }}
-    .metric-card {{
-        position: relative; background: #161a22; border-radius: 14px;
-        padding: 20px 22px 26px 24px;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.04);
-        color: #EAECEF;
-        min-height: 120px;
-    }}
-    .metric-live {{
-        position: absolute; top: 10px; right: 14px;
-        display: flex; align-items: center; gap: 6px;
-        font-size: 12px; color: #B7F7C4;
-    }}
-    .pulse {{
-        width: 8px; height: 8px; border-radius: 50%;
-        background: #2ecc71; box-shadow: 0 0 6px #2ecc71;
-        animation: pulse 1.5s infinite;
-    }}
-    @keyframes pulse {{
-        0% {{ opacity: 0.3; transform: scale(0.8); }}
-        50% {{ opacity: 1; transform: scale(1.2); }}
-        100% {{ opacity: 0.3; transform: scale(0.8); }}
-    }}
-    </style>
-
-    <!-- Reihe 1 -->
     <div class="metric-container metric-row-3">
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>❤️ HEART RATE</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hr'),0)} bpm</div>
       </div>
-
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>💗 HRV (RMSSD)</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_rmssd')*1000 if metrics.get('hrv_rmssd') else None,0)} ms</div>
       </div>
-
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>🩸 GLUCOSE</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('glucose'),0)} mg/dL</div>
         <div style="font-size:13px;color:#C8CDD6">{arrow} {trend_text}</div>
       </div>
     </div>
 
-    <!-- Reihe 2 -->
     <div class="metric-container metric-row-5">
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>💠 SDNN</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_sdnn')*1000 if metrics.get('hrv_sdnn') else None,0)} ms</div>
       </div>
-
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>🔢 NN50</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_nn50'),0)}</div>
       </div>
-
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>📊 pNN50</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_pnn50'),1)}%</div>
       </div>
-
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>🧠 STRESS INDEX</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_stress_index'),2)}</div>
       </div>
-
       <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
         <div>⚡ LF/HF RATIO</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_lf_hf_ratio'),2)}</div>
-      </div>
-    </div>
-
-    <!-- Reihe 3 -->
-    <div class="metric-container metric-row-3">
-      <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
-        <div>🌊 VLF</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_vlf'),2)}</div>
-        <div style="font-size:13px;color:#C8CDD6">Very Low Frequency (slow recovery)</div>
-      </div>
-
-      <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
-        <div>⚡ LF</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_lf'),2)}</div>
-        <div style="font-size:13px;color:#C8CDD6">Low Frequency (sympathetic)</div>
-      </div>
-
-      <div class="metric-card"><div class="metric-live"><div class="pulse"></div>Live</div>
-        <div>💨 HF</div><div style="font-size:40px;font-weight:700">{safe_format(metrics.get('hrv_hf'),2)}</div>
-        <div style="font-size:13px;color:#C8CDD6">High Frequency (parasympathetic)</div>
       </div>
     </div>
     """
@@ -295,15 +236,13 @@ def main():
     df_polar, df_glucose = connect_to_mongo()
     metrics = compute_metrics(df_polar, df_glucose, window_minutes)
 
-    # 🔹 Live Cards
     render_live_cards(metrics)
 
-    # 🔹 Combined Chart
     st.subheader(f"Combined Signals — last {window_minutes} minutes")
     if not df_polar.empty or not df_glucose.empty:
         st.plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
 
-    # 🔹 HR Chart
+    # HR Chart
     if not df_polar.empty and "hr" in df_polar.columns:
         st.subheader("Heart Rate (HR)")
         fig_hr = go.Figure()
@@ -314,7 +253,7 @@ def main():
         fig_hr.update_layout(template="plotly_dark", height=300, margin=dict(l=0, r=0, t=10, b=0))
         st.plotly_chart(fig_hr, use_container_width=True)
 
-    # 🔹 HRV Chart
+    # HRV Chart
     if not df_polar.empty and ("hrv_rmssd" in df_polar.columns or "hrv_sdnn" in df_polar.columns):
         st.subheader("HRV (RMSSD & SDNN)")
         fig_hrv = go.Figure()
@@ -331,7 +270,7 @@ def main():
         fig_hrv.update_layout(template="plotly_dark", height=300, margin=dict(l=0, r=0, t=10, b=0))
         st.plotly_chart(fig_hrv, use_container_width=True)
 
-    # 🔹 Glucose Chart
+    # Glucose Chart
     if not df_glucose.empty and "sgv" in df_glucose.columns:
         st.subheader("Glucose (CGM)")
         fig_gl = go.Figure()
@@ -340,4 +279,26 @@ def main():
             yref="y", y0=70, y1=140,
             fillcolor="rgba(46,204,113,0.18)", line=dict(width=0)
         )
-        fig_gl.add_trace(go.Scatter
+        fig_gl.add_trace(go.Scatter(
+            x=df_glucose.index, y=df_glucose["sgv"],
+            mode="lines+markers", line=dict(color="#27ae60", width=2),
+            marker=dict(size=4), name="Glucose (mg/dL)"
+        ))
+        g_min, g_max = df_glucose["sgv"].min(), df_glucose["sgv"].max()
+        fig_gl.update_layout(
+            template="plotly_dark", height=300,
+            margin=dict(l=0, r=0, t=10, b=0),
+            yaxis=dict(range=[min(60, g_min-10), max(160, g_max+15)], title="mg/dL")
+        )
+        st.plotly_chart(fig_gl, use_container_width=True)
+
+    if not df_polar.empty:
+        st.subheader("Recent Polar Samples")
+        st.dataframe(df_polar.tail(10))
+    if not df_glucose.empty:
+        st.subheader("Recent CGM Samples")
+        st.dataframe(df_glucose.tail(10))
+
+
+if __name__ == "__main__":
+    main()
