@@ -118,20 +118,31 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
 # === Styled Live Cards ===
 def render_live_cards(metrics):
     arrow, trend_text = map_direction(metrics.get("glucose_direction"))
-    html_id = str(uuid.uuid4())
+    st.markdown("### 🔴 Live Biofeedback Metrics")
+    st.caption(f"Updated: {datetime.now().strftime('%H:%M:%S')}")
 
-    # === Stildefinitionen ===
-    st.markdown(f"""
+    # === HTML + CSS Layout (echtes Grid) ===
+    html_id = str(uuid.uuid4())
+    g_val = safe_format(metrics.get("glucose"), 0)
+    arrow, trend_text = map_direction(metrics.get("glucose_direction"))
+
+    html = f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-    .metric-container {{
+    .metrics-grid {{
         display: grid;
+        grid-template-columns: repeat(3, 1fr);
         gap: 14px;
-        margin-bottom: 26px;
+        font-family: 'Inter', sans-serif;
+        margin-bottom: 24px;
+    }}
+    .metrics-grid-5 {{
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 14px;
+        margin-bottom: 24px;
         font-family: 'Inter', sans-serif;
     }}
-    .metric-row-3 {{ grid-template-columns: repeat(3, 1fr); }}
-    .metric-row-5 {{ grid-template-columns: repeat(5, 1fr); }}
     .metric-card {{
         background: #161a22;
         border-radius: 14px;
@@ -158,48 +169,28 @@ def render_live_cards(metrics):
         text-align: left;
     }}
     </style>
-    """, unsafe_allow_html=True)
 
-    def card(label, value, unit="", delta=None):
-        val = safe_format(value, 0)
-        html = f"""
-        <div class='metric-card'>
-            <div class='metric-label'>{label}</div>
-            <div class='metric-value'>{val}{unit}</div>
-        </div>
-        """
-        st.markdown(html, unsafe_allow_html=True)
+    <div class="metrics-grid">
+        <div class="metric-card"><div class="metric-label">❤️ Heart Rate (bpm)</div><div class="metric-value">{safe_format(metrics.get("hr"),0)}</div></div>
+        <div class="metric-card"><div class="metric-label">💗 HRV (RMSSD, ms)</div><div class="metric-value">{safe_format(metrics.get("hrv_rmssd")*1000 if metrics.get("hrv_rmssd") else None,0)}</div></div>
+        <div class="metric-card"><div class="metric-label">🩸 Glucose (mg/dL)</div><div class="metric-value">{g_val} {arrow} {trend_text}</div></div>
+    </div>
 
-    st.markdown("### 🔴 Live Biofeedback Metrics")
-    st.caption(f"Updated: {datetime.now().strftime('%H:%M:%S')}")
+    <div class="metrics-grid-5">
+        <div class="metric-card"><div class="metric-label">💠 SDNN (ms)</div><div class="metric-value">{safe_format(metrics.get("hrv_sdnn")*1000 if metrics.get("hrv_sdnn") else None,0)}</div></div>
+        <div class="metric-card"><div class="metric-label">🔢 NN50</div><div class="metric-value">{safe_format(metrics.get("hrv_nn50"),0)}</div></div>
+        <div class="metric-card"><div class="metric-label">📊 pNN50 (%)</div><div class="metric-value">{safe_format(metrics.get("hrv_pnn50"),0)}</div></div>
+        <div class="metric-card"><div class="metric-label">🧠 Stress Index</div><div class="metric-value">{safe_format(metrics.get("hrv_stress_index"),0)}</div></div>
+        <div class="metric-card"><div class="metric-label">⚡ LF/HF Ratio</div><div class="metric-value">{safe_format(metrics.get("hrv_lf_hf_ratio"),2)}</div></div>
+    </div>
 
-    # === Reihe 1: Hauptmetriken ===
-    st.markdown("<div class='metric-container metric-row-3'>", unsafe_allow_html=True)
-    card("❤️ Heart Rate (bpm)", metrics.get("hr"))
-    card("💗 HRV (RMSSD, ms)", metrics.get("hrv_rmssd") * 1000 if metrics.get("hrv_rmssd") else None)
-    g = metrics.get("glucose")
-    g_val = safe_format(g, 0)
-    arrow, trend_text = map_direction(metrics.get("glucose_direction"))
-    g_html = f"<div class='metric-card'><div class='metric-label'>🩸 Glucose (mg/dL)</div><div class='metric-value'>{g_val} {arrow} {trend_text}</div></div>"
-    st.markdown(g_html, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # === Reihe 2: HRV-Zeitdomäne ===
-    st.markdown("<div class='metric-container metric-row-5'>", unsafe_allow_html=True)
-    card("💠 SDNN (ms)", metrics.get("hrv_sdnn") * 1000 if metrics.get("hrv_sdnn") else None)
-    card("🔢 NN50", metrics.get("hrv_nn50"))
-    card("📊 pNN50 (%)", metrics.get("hrv_pnn50"))
-    card("🧠 Stress Index", metrics.get("hrv_stress_index"))
-    card("⚡ LF/HF Ratio", metrics.get("hrv_lf_hf_ratio"))
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # === Reihe 3: Frequenzbereich ===
-    st.markdown("<div class='metric-container metric-row-3'>", unsafe_allow_html=True)
-    card("🌊 VLF", metrics.get("hrv_vlf"))
-    card("⚡ LF", metrics.get("hrv_lf"))
-    card("💨 HF", metrics.get("hrv_hf"))
-    st.markdown("</div>", unsafe_allow_html=True)
-
+    <div class="metrics-grid">
+        <div class="metric-card"><div class="metric-label">🌊 VLF</div><div class="metric-value">{safe_format(metrics.get("hrv_vlf"),2)}</div></div>
+        <div class="metric-card"><div class="metric-label">⚡ LF</div><div class="metric-value">{safe_format(metrics.get("hrv_lf"),2)}</div></div>
+        <div class="metric-card"><div class="metric-label">💨 HF</div><div class="metric-value">{safe_format(metrics.get("hrv_hf"),2)}</div></div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
 # === Plot ===
 def create_combined_plot(df_polar, df_glucose):
