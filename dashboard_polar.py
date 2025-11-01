@@ -74,13 +74,15 @@ def safe_power(value):
     try:
         if value is None or pd.isna(value):
             return "⏳"
-        if value < 0.001:  # Sekunden² → Millisekunden²
+
+        # fast alle Polar-Power-Werte sind in s² → Umrechnen in ms²
+        if value < 1:  
             scaled = value * 1e6
             unit = "ms²"
         else:
-            scaled = value * 100  # normierte Power (0–1 → %)
-            unit = "%"
-        return f"{scaled:.2f} {unit}"
+            scaled = value
+            unit = "a.u."  # falls absolute Einheit
+        return f"{scaled:.0f} {unit}"
     except Exception:
         return "⏳"
 
