@@ -107,6 +107,58 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
     return metrics
 
 
+# === Combined Plot ===
+def create_combined_plot(df_polar, df_glucose):
+    fig = go.Figure()
+    y_min, y_max = (40, 180)
+    if not df_glucose.empty and "sgv" in df_glucose.columns:
+        g_min, g_max = df_glucose["sgv"].min(), df_glucose["sgv"].max()
+        y_min, y_max = max(40, g_min - 20), min(250, g_max + 20)
+
+    if not df_polar.empty and "hr" in df_polar.columns:
+        fig.add_trace(go.Scatter(
+            x=df_polar.index, y=df_polar["hr"],
+            name="Heart Rate (bpm)", mode="lines",
+            line=dict(color="#e74c3c", width=2), yaxis="y"
+        ))
+    if not df_polar.empty and "hrv_rmssd" in df_polar.columns:
+        fig.add_trace(go.Scatter(
+            x=df_polar.index, y=df_polar["hrv_rmssd"]*1000,
+            name="HRV RMSSD (ms)", mode="lines",
+            line=dict(color="#2980b9", width=2), yaxis="y2"
+        ))
+    if not df_glucose.empty and "sgv" in df_glucose.columns:
+        fig.add_trace(go.Scatter(
+            x=df_glucose.index, y=df_glucose["sgv"],
+            name="Glucose (mg/dL)", mode="lines",
+            line=dict(color="#27ae60", width=3), yaxis="y3"
+        ))
+
+    fig.update_layout(
+        template="plotly_dark",
+        height=460,
+        margin=dict(l=60, r=90, t=40, b=60),
+        xaxis=dict(title="Time"),
+        yaxis=dict(
+            title=dict(text="Heart Rate (bpm)", font=dict(color="#e74c3c")),
+            tickfont=dict(color="#e74c3c")
+        ),
+        yaxis2=dict(
+            title=dict(text="HRV (ms)", font=dict(color="#2980b9")),
+            tickfont=dict(color="#2980b9"),
+            overlaying="y", side="right", position=0.93
+        ),
+        yaxis3=dict(
+            title=dict(text="Glucose (mg/dL)", font=dict(color="#27ae60")),
+            tickfont=dict(color="#27ae60"),
+            overlaying="y", side="right", position=1.0,
+            range=[y_min, y_max]
+        ),
+        legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5)
+    )
+    return fig
+
+
 # === Live Cards ===
 def render_live_cards(metrics):
     arrow, trend_text = map_direction(metrics.get("glucose_direction"))
@@ -205,12 +257,12 @@ def main():
     # 🔹 Live Cards (2 Reihen)
     render_live_cards(metrics)
 
-    # 🔹 Restliches Dashboard (Charts, Tables) bleibt unverändert
+    # 🔹 Combined Chart
     st.subheader(f"Combined Signals — last {window_minutes} minutes")
     if not df_polar.empty or not df_glucose.empty:
         st.plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
 
-    # HR Chart
+    # 🔹 HR Chart
     if not df_polar.empty and "hr" in df_polar.columns:
         st.subheader("Heart Rate (HR)")
         fig_hr = go.Figure()
@@ -220,7 +272,7 @@ def main():
         fig_hr.update_layout(template="plotly_dark", height=300, margin=dict(l=0, r=0, t=10, b=0))
         st.plotly_chart(fig_hr, use_container_width=True)
 
-    # HRV Chart
+    # 🔹 HRV Chart
     if not df_polar.empty and ("hrv_rmssd" in df_polar.columns or "hrv_sdnn" in df_polar.columns):
         st.subheader("HRV (RMSSD & SDNN)")
         fig_hrv = go.Figure()
@@ -233,7 +285,7 @@ def main():
         fig_hrv.update_layout(template="plotly_dark", height=300, margin=dict(l=0, r=0, t=10, b=0))
         st.plotly_chart(fig_hrv, use_container_width=True)
 
-    # Glucose Chart
+    # 🔹 Glucose Chart
     if not df_glucose.empty and "sgv" in df_glucose.columns:
         st.subheader("Glucose (CGM)")
         fig_gl = go.Figure()
@@ -248,7 +300,7 @@ def main():
                              yaxis=dict(range=[min(60, g_min-10), max(160, g_max+15)], title="mg/dL"))
         st.plotly_chart(fig_gl, use_container_width=True)
 
-    # Tabellen
+    # 🔹 Tabellen
     if not df_polar.empty:
         st.subheader("Recent Polar Samples")
         st.dataframe(df_polar.tail(10))
