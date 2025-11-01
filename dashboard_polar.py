@@ -71,10 +71,11 @@ def map_direction(direction):
 def safe_format(value, decimals=0):
     try:
         if value is None or (isinstance(value, float) and pd.isna(value)):
-            return "⏳ wird berechnet …"
+            # Kürzerer Placeholder verhindert Layout-Shift
+            return "–"
         return f"{value:.{decimals}f}"
     except Exception:
-        return "⏳ wird berechnet …"
+        return "–"
 
 
 # === Metrics ===
@@ -171,8 +172,9 @@ def render_live_cards(metrics):
     st.caption(f"Updated: {datetime.now().strftime('%H:%M:%S')}")
 
     def show_metric(label, value, unit="", delta=None):
-        if value is None:
-            st.metric(label, "⏳ wird berechnet …")
+        # Wenn Wert fehlt → „⏳“ aber fester Platzhalter
+        if value is None or (isinstance(value, str) and value.lower().startswith("na")):
+            st.metric(label, "⏳", delta)
         else:
             st.metric(label, safe_format(value, 0) + unit, delta)
 
@@ -186,7 +188,7 @@ def render_live_cards(metrics):
     with col3:
         glucose = metrics.get("glucose")
         if glucose is None:
-            st.metric("🩸 Glucose (mg/dL)", "⏳ wird berechnet …")
+            st.metric("🩸 Glucose (mg/dL)", "⏳")
         else:
             st.metric("🩸 Glucose (mg/dL)", safe_format(glucose, 0), f"{arrow} {trend_text}")
 
