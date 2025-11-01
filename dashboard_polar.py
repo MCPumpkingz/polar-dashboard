@@ -3,10 +3,8 @@ from datetime import datetime, timedelta
 import pandas as pd
 import pytz
 import streamlit as st
-import streamlit.components.v1 as components
 from pymongo import MongoClient
 import plotly.graph_objects as go
-import uuid
 
 # === Auto-Refresh (every 2 s) ===
 try:
@@ -25,22 +23,17 @@ def connect_to_mongo():
     col_polar = db_polar["polar_data"]
     col_glucose = db_glucose["entries"]
 
-    # 🕐 Immer aktueller Zeitbereich
     tz = pytz.timezone("Europe/Zurich")
     now = datetime.now(tz)
     window_minutes = st.session_state.get("window_minutes", 15)
     time_threshold = now - timedelta(minutes=window_minutes)
-
-    # CET → ISO mit Offset
-    cet = pytz.timezone("Europe/Zurich")
-    time_threshold_str = time_threshold.astimezone(cet).isoformat()
+    time_threshold_str = time_threshold.astimezone(tz).isoformat()
 
     # === Polar ===
     polar_data = list(col_polar.find(
         {"timestamp": {"$gte": time_threshold_str}}
     ).sort("timestamp", 1))
     df_polar = pd.DataFrame(polar_data)
-
     if not df_polar.empty:
         df_polar["timestamp"] = pd.to_datetime(df_polar["timestamp"], errors="coerce", utc=True)
         df_polar["timestamp"] = df_polar["timestamp"].dt.tz_convert("Europe/Zurich")
@@ -52,7 +45,6 @@ def connect_to_mongo():
         {"dateString": {"$gte": time_threshold_utc.isoformat()}}
     ).sort("dateString", 1))
     df_glucose = pd.DataFrame(glucose_data)
-
     if not df_glucose.empty:
         df_glucose["timestamp"] = pd.to_datetime(df_glucose["dateString"], errors="coerce", utc=True)
         df_glucose["timestamp"] = df_glucose["timestamp"].dt.tz_convert("Europe/Zurich")
@@ -79,44 +71,33 @@ def map_direction(direction):
 def safe_format(value, decimals=0):
     try:
         if value is None or (isinstance(value, float) and pd.isna(value)):
-            return "–"
+            return "⏳ wird berechnet …"
         return f"{value:.{decimals}f}"
     except Exception:
-        return "–"
-
-
-def safe_power(value):
-    try:
-        if value is None or pd.isna(value):
-            return "–"
-        return f"{value * 1e6:.2f}"
-    except Exception:
-        return "–"
+        return "⏳ wird berechnet …"
 
 
 # === Metrics ===
 def compute_metrics(df_polar, df_glucose, window_minutes):
+    def sanitize(v):
+        if v is None or pd.isna(v) or (isinstance(v, str) and v.lower() in ["na", "n/a", "nan"]):
+            return None
+        return v
+
     metrics = {}
-
     if not df_polar.empty:
-        # ❗ VLF, LF, HF weglassen, damit Live-Update sofort läuft
-        valid = df_polar.dropna(subset=[
-            "hr", "hrv_rmssd", "hrv_sdnn", "hrv_nn50",
-            "hrv_pnn50", "hrv_stress_index", "hrv_lf_hf_ratio"
-        ])
-
-        last_entry = valid.tail(1).iloc[0] if not valid.empty else df_polar.tail(1).iloc[0]
+        last_entry = df_polar.iloc[-1]
         metrics.update({
-            "hr": last_entry.get("hr"),
-            "hrv_rmssd": last_entry.get("hrv_rmssd"),
-            "hrv_sdnn": last_entry.get("hrv_sdnn"),
-            "hrv_nn50": last_entry.get("hrv_nn50"),
-            "hrv_pnn50": last_entry.get("hrv_pnn50"),
-            "hrv_stress_index": last_entry.get("hrv_stress_index"),
-            "hrv_lf_hf_ratio": last_entry.get("hrv_lf_hf_ratio"),
-            "hrv_vlf": last_entry.get("hrv_vlf"),
-            "hrv_lf": last_entry.get("hrv_lf"),
-            "hrv_hf": last_entry.get("hrv_hf"),
+            "hr": sanitize(last_entry.get("hr")),
+            "hrv_rmssd": sanitize(last_entry.get("hrv_rmssd")),
+            "hrv_sdnn": sanitize(last_entry.get("hrv_sdnn")),
+            "hrv_nn50": sanitize(last_entry.get("hrv_nn50")),
+            "hrv_pnn50": sanitize(last_entry.get("hrv_pnn50")),
+            "hrv_stress_index": sanitize(last_entry.get("hrv_stress_index")),
+            "hrv_lf_hf_ratio": sanitize(last_entry.get("hrv_lf_hf_ratio")),
+            "hrv_vlf": sanitize(last_entry.get("hrv_vlf")),
+            "hrv_lf": sanitize(last_entry.get("hrv_lf")),
+            "hrv_hf": sanitize(last_entry.get("hrv_hf")),
         })
     else:
         metrics.update({k: None for k in [
@@ -125,8 +106,8 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
         ]})
 
     if not df_glucose.empty and "sgv" in df_glucose.columns:
-        latest_glucose = df_glucose["sgv"].iloc[-1]
-        direction = df_glucose["direction"].iloc[-1] if "direction" in df_glucose.columns else None
+        latest_glucose = sanitize(df_glucose["sgv"].iloc[-1])
+        direction = sanitize(df_glucose["direction"].iloc[-1] if "direction" in df_glucose.columns else None)
     else:
         latest_glucose, direction = None, None
 
@@ -134,7 +115,6 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
         "glucose": latest_glucose,
         "glucose_direction": direction
     })
-
     return metrics
 
 
@@ -184,47 +164,54 @@ def create_combined_plot(df_polar, df_glucose):
     return fig
 
 
+# === Live Cards ===
 def render_live_cards(metrics):
-    """Render the live metric cards in native Streamlit (auto-refresh compatible)."""
     arrow, trend_text = map_direction(metrics.get("glucose_direction"))
-
     st.markdown("### 🔴 Live Biofeedback Metrics")
     st.caption(f"Updated: {datetime.now().strftime('%H:%M:%S')}")
 
-    # === Reihe 1: Hauptmetriken ===
+    def show_metric(label, value, unit="", delta=None):
+        if value is None:
+            st.metric(label, "⏳ wird berechnet …")
+        else:
+            st.metric(label, safe_format(value, 0) + unit, delta)
+
+    # === Reihe 1 ===
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("❤️ Heart Rate (bpm)", safe_format(metrics.get("hr"), 0))
+        show_metric("❤️ Heart Rate (bpm)", metrics.get("hr"))
     with col2:
-        st.metric("💗 HRV (RMSSD, ms)", safe_format(metrics.get("hrv_rmssd") * 1000 if metrics.get("hrv_rmssd") else None, 0))
+        rmssd = metrics.get("hrv_rmssd")
+        show_metric("💗 HRV (RMSSD, ms)", rmssd * 1000 if rmssd else None)
     with col3:
-        st.metric("🩸 Glucose (mg/dL)", safe_format(metrics.get("glucose"), 0), f"{arrow} {trend_text}")
+        glucose = metrics.get("glucose")
+        if glucose is None:
+            st.metric("🩸 Glucose (mg/dL)", "⏳ wird berechnet …")
+        else:
+            st.metric("🩸 Glucose (mg/dL)", safe_format(glucose, 0), f"{arrow} {trend_text}")
 
-    # === Reihe 2: Sekundärmetriken ===
+    # === Reihe 2 ===
     col4, col5, col6, col7, col8 = st.columns(5)
     with col4:
-        st.metric("💠 SDNN (ms)", safe_format(metrics.get("hrv_sdnn") * 1000 if metrics.get("hrv_sdnn") else None, 0))
+        sdnn = metrics.get("hrv_sdnn")
+        show_metric("💠 SDNN (ms)", sdnn * 1000 if sdnn else None)
     with col5:
-        st.metric("🔢 NN50", safe_format(metrics.get("hrv_nn50"), 0))
+        show_metric("🔢 NN50", metrics.get("hrv_nn50"))
     with col6:
-        st.metric("📊 pNN50 (%)", safe_format(metrics.get("hrv_pnn50"), 1))
+        show_metric("📊 pNN50 (%)", metrics.get("hrv_pnn50"))
     with col7:
-        st.metric("🧠 Stress Index", safe_format(metrics.get("hrv_stress_index"), 2))
+        show_metric("🧠 Stress Index", metrics.get("hrv_stress_index"))
     with col8:
-        st.metric("⚡ LF/HF Ratio", safe_format(metrics.get("hrv_lf_hf_ratio"), 2))
+        show_metric("⚡ LF/HF Ratio", metrics.get("hrv_lf_hf_ratio"))
 
-    # === Reihe 3: Frequenzbereich (VLF, LF, HF) ===
+    # === Reihe 3 ===
     col9, col10, col11 = st.columns(3)
     with col9:
-        st.metric("🌊 VLF", safe_format(metrics.get("hrv_vlf"), 2))
+        show_metric("🌊 VLF", metrics.get("hrv_vlf"))
     with col10:
-        st.metric("⚡ LF", safe_format(metrics.get("hrv_lf"), 2))
+        show_metric("⚡ LF", metrics.get("hrv_lf"))
     with col11:
-        st.metric("💨 HF", safe_format(metrics.get("hrv_hf"), 2))
-
-    # === Hinweis, wenn FFT-Daten noch nicht da sind ===
-    if pd.isna(metrics.get("hrv_vlf")) or pd.isna(metrics.get("hrv_lf")) or pd.isna(metrics.get("hrv_hf")):
-        st.info("⚙️ Frequency-domain HRV (LF/HF/VLF) initializing… please wait ~3 min for full data.")
+        show_metric("💨 HF", metrics.get("hrv_hf"))
 
 
 # === Main App ===
