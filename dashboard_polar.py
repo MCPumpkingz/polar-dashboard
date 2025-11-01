@@ -77,13 +77,23 @@ def safe_power(value):
     try:
         if value is None or pd.isna(value):
             return "⏳"
-        scaled = value * 1e6  # Polar liefert s² → wir zeigen ms² an
-        if scaled < 1:
-            return f"{scaled:.3f}"
-        elif scaled < 100:
-            return f"{scaled:.1f}"
+
+        # Wenn Wert < 0.001 → wahrscheinlich s² → in ms² umrechnen
+        if value < 0.001:
+            scaled = value * 1e6
+            unit = "ms²"
         else:
-            return f"{scaled:,.0f}"
+            scaled = value * 100  # normierte Einheiten in %
+            unit = "%"
+
+        if scaled < 1:
+            display = f"{scaled:.2f}"
+        elif scaled < 100:
+            display = f"{scaled:.1f}"
+        else:
+            display = f"{scaled:,.0f}"
+
+        return f"{display} {unit}"
     except Exception:
         return "⏳"
 
