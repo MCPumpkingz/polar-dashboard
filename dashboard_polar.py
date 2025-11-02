@@ -260,49 +260,6 @@ def main():
     if not df_polar.empty or not df_glucose.empty:
         st.plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
 
-    # === HRV Ampel – Spickzettel ===
-    st.markdown("### 🧠 HRV-Ampel – Spickzettel")
-
-    data = [
-        ["RMSSD", "Kurzfristige HRV (Parasympathikus)", "> 30 ms", "20–30 ms", "< 20 ms"],
-        ["SDNN", "Gesamt-HRV (Symp + Parasymp)", "> 50 ms", "30–50 ms", "< 30 ms"],
-        ["pNN50", "% RR-Diff > 50 ms", "> 15 %", "8–15 %", "< 8 %"],
-        ["Stress-Index (SI)", "Sympathische Dominanz", "< 150", "150–300", "> 300"],
-        ["LF-Power", "Mischung Symp + Parasymp", "400–3000 ms²", "3000–5000 ms²", "> 5000 ms² (Überaktiv.)"],
-        ["HF-Power", "Parasympathische Aktivität (Atmung)", "> 1000 ms²", "400–1000 ms²", "< 400 ms²"],
-        ["LF/HF-Ratio", "Sympatho-vagales Gleichgewicht", "0.5–2.0", "2.0–3.0", "> 3.0 oder < 0.5"]
-    ]
-
-    df_hrv_ampel = pd.DataFrame(
-        data,
-        columns=["Metrik", "Was misst sie?", "🟢 Erholung / Balance", "🟡 Aktivierung", "🔴 Stress / Erschöpfung"]
-    )
-
-    st.markdown(
-        """
-        <style>
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.9rem;
-        }
-        th {
-            background-color: #1f2630;
-            color: #ddd;
-            text-align: center;
-            padding: 6px;
-        }
-        td {
-            text-align: center;
-            padding: 6px;
-            color: #eee;
-        }
-        tr:nth-child(even) {background-color: #2a2f3a;}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
     st.table(df_hrv_ampel)
     
     if not df_polar.empty:
