@@ -259,8 +259,6 @@ def main():
     st.subheader(f"Combined Signals — last {window_minutes} minutes")
     if not df_polar.empty or not df_glucose.empty:
         st.plotly_chart(create_combined_plot(df_polar, df_glucose), use_container_width=True)
-
-    st.table(df_hrv_ampel)
     
     if not df_polar.empty:
         st.subheader("Recent Polar Samples")
