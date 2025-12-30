@@ -1,5 +1,4 @@
-import os
-from datetime import datetime, timedelta
+import datetime, timedelta
 import pandas as pd
 import pytz
 import streamlit as st
@@ -95,14 +94,14 @@ def compute_metrics(df_polar, df_glucose, window_minutes):
         metrics.update({
             "hr": sanitize(last.get("hr")),
             "hrv_rmssd": sanitize(last.get("hrv_rmssd")),
-            #"hrv_sdnn": sanitize(last.get("hrv_sdnn")),
-            #"hrv_nn50": sanitize(last.get("hrv_nn50")),
-           # "hrv_pnn50": sanitize(last.get("hrv_pnn50")),
-           # "hrv_stress_index": sanitize(last.get("hrv_stress_index")),
-            #"hrv_lf_hf_ratio": sanitize(last.get("hrv_lf_hf_ratio")),
-           # "hrv_vlf": sanitize(last.get("hrv_vlf")),
-           # "hrv_lf": sanitize(last.get("hrv_lf")),
-           # "hrv_hf": sanitize(last.get("hrv_hf")),
+            "hrv_sdnn": sanitize(last.get("hrv_sdnn")),
+            "hrv_nn50": sanitize(last.get("hrv_nn50")),
+            "hrv_pnn50": sanitize(last.get("hrv_pnn50")),
+            "hrv_stress_index": sanitize(last.get("hrv_stress_index")),
+            "hrv_lf_hf_ratio": sanitize(last.get("hrv_lf_hf_ratio")),
+            "hrv_vlf": sanitize(last.get("hrv_vlf")),
+            "hrv_lf": sanitize(last.get("hrv_lf")),
+            "hrv_hf": sanitize(last.get("hrv_hf")),
         })
     else:
         metrics.update({k: None for k in [
