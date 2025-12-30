@@ -70,14 +70,12 @@ def safe_power(value):
     try:
         if value is None or pd.isna(value):
             return "⏳"
-
-        # fast alle Polar-Power-Werte sind in s² → Umrechnen in ms²
         if value < 1:  
             scaled = value * 1e6
             unit = "ms²"
         else:
             scaled = value
-            unit = "a.u."  # falls absolute Einheit
+            unit = "a.u."
         return f"{scaled:.0f} {unit}"
     except Exception:
         return "⏳"
@@ -137,13 +135,6 @@ def render_live_cards(metrics):
         font-family: 'Inter', sans-serif;
         margin-bottom: 24px;
     }}
-    .metrics-grid-5 {{
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 14px;
-        margin-bottom: 24px;
-        font-family: 'Inter', sans-serif;
-    }}
     .metric-card {{
         background: #161a22;
         border-radius: 14px;
@@ -177,19 +168,6 @@ def render_live_cards(metrics):
         <div class="metric-card"><div class="metric-label">🩸 Glucose (mg/dL)</div><div class="metric-value">{g_val} {arrow} {trend_text}</div></div>
     </div>
 
-    <div class="metrics-grid-5">
-        <div class="metric-card"><div class="metric-label">💠 SDNN (ms)</div><div class="metric-value">{safe_format(metrics.get("hrv_sdnn")*1000 if metrics.get("hrv_sdnn") else None,0)}</div></div>
-        <div class="metric-card"><div class="metric-label">🔢 NN50</div><div class="metric-value">{safe_format(metrics.get("hrv_nn50"),0)}</div></div>
-        <div class="metric-card"><div class="metric-label">📊 pNN50 (%)</div><div class="metric-value">{safe_format(metrics.get("hrv_pnn50"),0)}</div></div>
-        <div class="metric-card"><div class="metric-label">🧠 Stress Index</div><div class="metric-value">{safe_format(metrics.get("hrv_stress_index"),0)}</div></div>
-        <div class="metric-card"><div class="metric-label">⚡ LF/HF Ratio</div><div class="metric-value">{safe_format(metrics.get("hrv_lf_hf_ratio"),2)}</div></div>
-    </div>
-
-    <div class="metrics-grid">
-        <div class="metric-card"><div class="metric-label">🌊 VLF Power</div><div class="metric-value">{safe_power(metrics.get("hrv_vlf"))}</div></div>
-        <div class="metric-card"><div class="metric-label">⚡ LF Power</div><div class="metric-value">{safe_power(metrics.get("hrv_lf"))}</div></div>
-        <div class="metric-card"><div class="metric-label">💨 HF Power</div><div class="metric-value">{safe_power(metrics.get("hrv_hf"))}</div></div>
-    </div>
     """
     st.markdown(html, unsafe_allow_html=True)
 
@@ -217,7 +195,7 @@ def create_combined_plot(df_polar, df_glucose):
         margin=dict(l=60, r=90, t=40, b=60),
         xaxis=dict(title="Time"),
         yaxis=dict(title=dict(text="Heart Rate (bpm)", font=dict(color="#e74c3c")),
-                   tickfont=dict(color="#e74c3c")),
+                  tickfont=dict(color="#e74c3c")),
         yaxis2=dict(title=dict(text="HRV (ms)", font=dict(color="#2980b9")),
                     tickfont=dict(color="#2980b9"),
                     overlaying="y", side="right", position=0.93),
@@ -233,8 +211,6 @@ def create_combined_plot(df_polar, df_glucose):
 def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="🧪", layout="wide")
 
-   
-    
     if st_autorefresh:
         st_autorefresh(interval=2000, key="live_refresh")
 
