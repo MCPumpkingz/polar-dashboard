@@ -241,6 +241,14 @@ def create_combined_plot(df_polar, df_glucose):
 def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="🧪", layout="wide")
 
+   
+    
+    if st_autorefresh:
+        st_autorefresh(interval=2000, key="live_refresh")
+
+    tz = pytz.timezone("Europe/Zurich")
+    now = datetime.now(tz)
+    st.title("Biofeedback Dashboard – Polar & CGM")
     st.markdown(
     """
     <div style="color:#888; font-size:14px; margin-top:-8px; margin-bottom:12px;">
@@ -251,13 +259,6 @@ def main():
     """,
     unsafe_allow_html=True
     )
-    
-    if st_autorefresh:
-        st_autorefresh(interval=2000, key="live_refresh")
-
-    tz = pytz.timezone("Europe/Zurich")
-    now = datetime.now(tz)
-    st.title("Biofeedback Dashboard – Polar & CGM")
     st.markdown(f"<div style='text-align:right;color:#AAA;'>Last Update: {now.strftime('%H:%M:%S')} (local)</div>", unsafe_allow_html=True)
 
     st.sidebar.header("Settings")
