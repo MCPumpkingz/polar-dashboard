@@ -176,7 +176,7 @@ def render_live_cards(metrics):
         <div class="metric-card"><div class="metric-label">💗 HRV (RMSSD, ms)</div><div class="metric-value">{safe_format(metrics.get("hrv_rmssd")*1000 if metrics.get("hrv_rmssd") else None,0)}</div></div>
         <div class="metric-card"><div class="metric-label">🩸 Glucose (mg/dL)</div><div class="metric-value">{g_val} {arrow} {trend_text}</div></div>
     </div>
-html = f"""
+
     <div class="metrics-grid-5">
         <div class="metric-card"><div class="metric-label">💠 SDNN (ms)</div><div class="metric-value">{safe_format(metrics.get("hrv_sdnn")*1000 if metrics.get("hrv_sdnn") else None,0)}</div></div>
         <div class="metric-card"><div class="metric-label">🔢 NN50</div><div class="metric-value">{safe_format(metrics.get("hrv_nn50"),0)}</div></div>
