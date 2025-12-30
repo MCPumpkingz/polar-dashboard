@@ -240,6 +240,18 @@ def create_combined_plot(df_polar, df_glucose):
 # === Main ===
 def main():
     st.set_page_config(page_title="Biofeedback Dashboard – Polar & CGM", page_icon="🧪", layout="wide")
+
+    st.markdown(
+    """
+    <div style="color:#888; font-size:14px; margin-top:-8px; margin-bottom:12px;">
+    Part of the MAS ETH thesis <em>“Development of a Biofeedback System for Blood Glucose Regulation 
+    through Personalized Breathing Techniques”</em><br>
+    Marco Cocuzza · MAS ETH in Applied Technology · Supervisor: Prof. Dr. Sarah Meissner · 2025
+    </div>
+    """,
+    unsafe_allow_html=True
+    )
+    
     if st_autorefresh:
         st_autorefresh(interval=2000, key="live_refresh")
 
